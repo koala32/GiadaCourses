@@ -1,3 +1,22 @@
+sudo bash /opt/giadacourses/DEPLOY.sh (Dopo aver caricato i nuovi file per update sul github
+----------------------------------------------------------------------------------------------------------------
+# Esegui questo UNA volta sul VPS (come root o con sudo) (solo in caso di freshinstallation su una nuova vps)
+git config --global credential.helper store
+git clone https://koala32:IL_TUO_TOKEN@github.com/koala32/GiadaCourses.git /tmp/test-auth
+rm -rf /tmp/test-auth
+```
+
+Da quel momento Git salva il token e ogni `sudo bash DEPLOY.sh` funziona senza chiedere password.
+
+---
+
+**Flusso completo di ogni aggiornamento:**
+```
+1. Modifichi il codice in locale
+2. git push su GitHub (dal tuo PC)
+3. Sul VPS: sudo bash /opt/giadacourses/DEPLOY.sh
+-----------------------------------------------------------
+
 📘 MANUALE OPERATIVO GIADACOURSES v7.0
 1. DATI DI ACCESSO E CONFIGURAZIONE
 IP Server: 45.38.190.133

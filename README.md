@@ -1,113 +1,112 @@
-# GiadaCourses 🌈
+📘 MANUALE OPERATIVO GIADACOURSES v7.0
+1. DATI DI ACCESSO E CONFIGURAZIONE
+IP Server: 45.38.190.133
 
-Social English Learning Platform — Piattaforma social per imparare l'inglese
+Utente VPS: pepsifresh
 
-## 🚀 Deploy su VPS (Ubuntu 24.04)
+Cartella Applicazione: /opt/giadacourses
 
-### Primo deploy (installazione da zero)
-```bash
-# Sul server come root o con sudo
-cd /tmp
-git clone https://github.com/koala32/GiadaCourses.git
-cd GiadaCourses
-sudo bash DEPLOY.sh
-```
+GitHub Username: koala32
 
-### Aggiornamento (preserva database e uploads)
-```bash
-# Sul server
-cd /tmp
-rm -rf GiadaCourses
-git clone https://github.com/koala32/GiadaCourses.git
-cd GiadaCourses
-sudo bash DEPLOY.sh
-```
+GitHub Email: banfist00@gmail.com
 
-Il deploy script:
-- ✅ Clona da GitHub (sempre codice fresco)
-- ✅ **Preserva uploads e database** durante l'aggiornamento
-- ✅ Rimuove solo i vecchi file di codice
-- ✅ Configura Nginx con supporto WebSocket (Socket.IO)
-- ✅ Configura systemd service con auto-restart
-- ✅ SSL automatico con Let's Encrypt
+GitHub Token: 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
 
-## 🔧 Comandi utili
+Repository: https://github.com/koala32/GiadaCourses.git (Privato)
 
-```bash
-# Log in tempo reale
-sudo journalctl -u giadacourses -f
+2. PROCEDURA DI DEPLOY SICURO (AGGIORNAMENTO SOCIAL)
+Ogni volta che modifichi il codice e vuoi caricarlo sul server, usa questo script che abbiamo potenziato con controlli di integrità.
 
-# Stato servizio
+File: /opt/giadacourses/DEPLOY.sh
+--------------------------------------------------------------
+File: /opt/giadacourses/DEPLOY.sh
+#!/bin/bash
+SOURCE_DIR="/tmp/GiadaCourses"
+DEST_DIR="/opt/giadacourses"
+SERVICE_NAME="giadacourses"
+
+echo "🚀 Inizio Deploy..."
+
+# 1. Verifica integrità (Evita file troncati)
+if ! grep -q "</html>" "$SOURCE_DIR/index.html"; then
+    echo "❌ ERRORE: index.html incompleto. Deploy annullato."
+    exit 1
+fi
+
+# 2. Sincronizzazione atomica
+sudo systemctl stop $SERVICE_NAME
+sudo rsync -av --delete --exclude='database' --exclude='uploads' --exclude='node_modules' --exclude='.git' "$SOURCE_DIR/" "$DEST_DIR/"
+
+# 3. Permessi e Moduli
+sudo chown -R giadacourses:giadacourses "$DEST_DIR"
+sudo chmod -R 755 "$DEST_DIR"
+cd "$DEST_DIR" && sudo -u giadacourses npm install --production
+
+# 4. Riavvio e Nginx
+sudo systemctl start $SERVICE_NAME
+sudo nginx -t && sudo systemctl restart nginx
+
+echo "✅ Social Online!"
+---------------------------------------------------------
+
+3. CHECKLIST DI VERIFICA (POST-AGGIORNAMENTO)
+Dopo ogni update, esegui questi 3 controlli per assicurarti che tutto sia "DOC":
+
+Integrità del file (Il "mai più" senza </html>):
+
+1. tail -n 1 /opt/giadacourses/index.html
+# Deve rispondere: </html>
+
+2. Stato del Servizio:
 sudo systemctl status giadacourses
+# Deve essere "active (running)"
 
-# Riavvia
-sudo systemctl restart giadacourses
+3. Test Connessione Interna:
+curl -I http://127.0.0.1:3000
+# Deve rispondere: HTTP/1.1 200 OK
 
-# Backup manuale
-sudo /usr/local/bin/gc-backup.sh
-```
+------------------------------------------
+4. SINCRONIZZAZIONE VPS -> GITHUB (BACKUP CLOUD) (SE NECESSARIO)
+cd /opt/giadacourses
+sudo git add -A
+sudo git commit -m "Backup automatico VPS $(date +'%d/%m/%Y %H:%M')"
+sudo git push origin master:main --force
+---------------------------------------------
 
-## 📋 Fix inclusi nella v7.0
+5. RISOLUZIONE PROBLEMI COMUNI
+Schermata Viola Fissa o Bianco (Browser)
+Se il server è OK ma il sito non carica, è colpa del Service Worker nel tuo browser.
 
-### Schermo bloccato (splash fisso)
-- `init()` ora ha try/catch con safety timeout
-- Lo splash si nasconde SEMPRE dopo max 3 secondi, anche in caso di errori
+Apri il sito e premi F12.
 
-### Upload 404
-- Logging migliorato per debug file mancanti
-- CORS headers aggiunti sugli uploads
-- DEPLOY.sh preserva la cartella uploads durante gli aggiornamenti
+Vai in Application -> Storage.
 
-### Foto profilo
-- Verifica che il file esista dopo l'upload
-- Pulizia corretta della vecchia foto
-- Errori specifici per l'utente
+Clicca "Clear site data".
 
-### Storie con musica
-- Download musica con gestione redirect (Deezer usa redirect)
-- Verifica dimensione file dopo download
-- File musicali salvati permanentemente nel server
+Premi CTRL + F5 per ricaricare da zero.
 
-### Chiamate e Sfide
-- Socket.IO + SSE dual channel per affidabilità
-- Accept/Reject con vibrazione e notifica push
-- Timeout automatico dopo 30 secondi
-- ICE candidate buffering per connessioni lente
+Errore Nginx (WebSockets)
+Se le notifiche o le sfide 1v1 non funzionano, controlla che in /etc/nginx/sites-enabled/giadacourses ci siano queste righe dentro location /:
+/////
+(bash)
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+proxy_http_version 1.1;
+/////
+--------------------------------------------
 
-### Registrazione
-- Validazione campi più robusta
-- Errori specifici (email duplicata vs username duplicato)
-- Sanitizzazione input
+6. LAVORO "DOC" (CONSIGLI PRO)
 
-## 🏗️ Architettura
+1. Uso del .gitignore: Per non caricare moduli pesanti su GitHub, crea il file /opt/giadacourses/.gitignore:
 
-```
-/opt/giadacourses/
-├── server.js          # Backend Node.js (Express + Socket.IO)
-├── index.html         # Frontend SPA (tutto in un file)
-├── sw.js              # Service Worker PWA
-├── package.json       # Dipendenze npm
-├── manifest.json      # PWA manifest
-├── DEPLOY.sh          # Script deploy
-├── database/          # NeDB database (preservato nei deploy)
-│   ├── users.db
-│   ├── posts.db
-│   ├── exercises.db
-│   ├── messages.db
-│   ├── stories.db
-│   └── ...
-├── uploads/           # Media caricati (preservati nei deploy)
-└── icons/             # Icone PWA
-```
+node_modules/
+.DS_Store
+*.log
 
-## 📱 Funzionalità
+2. Backup Database: Oltre a GitHub, ogni tanto scarica la cartella /opt/giadacourses/database sul tuo PC.
 
-- **Social Feed**: Post con foto/video, like, commenti
-- **Storie 24h**: Con musica Deezer, filtri, template colorati
-- **Messaggi DM**: Chat private con audio, foto, video
-- **Chiamate WebRTC**: Audio/video con TURN server
-- **Sfide 1v1**: Quiz inglese in tempo reale
-- **Live Streaming**: Dirette WebRTC per lezioni
-- **Esercizi**: Quiz con livelli A1-C2
-- **Classifica**: XP, streak, badge
-- **PWA**: Installabile come app nativa
+3. Alias di Controllo: Aggiungi questo al tuo server (nano ~/.bashrc) per controllare tutto con un solo comando:
+alias check='sudo systemctl status giadacourses && tail -n 1 /opt/giadacourses/index.html'
+--------------------------------------------
+
+BUON SOCIAL!

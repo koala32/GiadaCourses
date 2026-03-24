@@ -10,7 +10,7 @@ GitHub Username: koala32
 
 GitHub Email: banfist00@gmail.com
 
-GitHub Token: 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
+GitHub Token: colcazzocheloscrivo
 
 Repository: https://github.com/koala32/GiadaCourses.git (Privato)
 

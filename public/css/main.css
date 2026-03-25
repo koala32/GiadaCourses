@@ -7,7 +7,7 @@
   --shadow:0 8px 32px rgba(100,80,180,0.12);
   --shadow-lg:0 16px 48px rgba(100,80,180,0.20);
   --r:20px;--rs:12px;
-  --fh:'Fredoka One',cursive;--fb:'Nunito',sans-serif;
+  --fh:'Poppins',sans-serif;--fb:'Inter',sans-serif;
   --nav-h:64px;--bot-h:70px;
   /* Gradiente primario brand */
   --grad:linear-gradient(135deg,#9C7CFF,#FF9ECD);
@@ -933,9 +933,14 @@ input[type=range]{accent-color:var(--coral);}
   padding: 8px 20px; border-radius: 12px; font-weight: 700; font-size: .85rem;
 }
 @media (max-width: 1024px) { #desktop-blocker { display: none !important; } }
-@media (min-width: 1025px) { #desktop-blocker { display: flex !important; } }
-/* Override: se standalone (PWA), mostra sempre anche su desktop */
+/* JS controlla la visibilita in base a detection avanzata */
 @media (display-mode: standalone) { #desktop-blocker { display: none !important; } }
+
+/* Anti-select per aree non-chat */
+body { -webkit-user-select: none; user-select: none; }
+.dm-sheet, .comment-input, .post-body, .comment-bubble, input, textarea, [contenteditable] {
+  -webkit-user-select: text; user-select: text;
+}
 
 /* ============================================================
    VERIFIED BADGE + TEACHER TAG

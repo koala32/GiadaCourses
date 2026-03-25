@@ -1,1 +1,1 @@
-Ricordati che ora la directory nuova é opt/GiadaCoursess
+Ricordati che ora la directory nuova é /opt/GiadaCoursess

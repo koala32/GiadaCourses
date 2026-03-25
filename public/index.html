@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#9C7CFF">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>GiadaCourses</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+<div id="desktop-blocker">
+  <div class="db-content">
+    <div class="db-icon">&#x1F4F1;</div>
+    <div class="db-title">GiadaCourses</div>
+    <div class="db-text">Questa app e progettata per dispositivi mobili.<br>Per la migliore esperienza, apri GiadaCourses dal tuo smartphone.</div>
+    <div class="db-badge">Modalita Desktop in costruzione</div>
+  </div>
+</div>
+
+
+
+<!-- PWA INSTALL PANEL (bottom sheet, non-blocking) -->
+<div id="pwa-panel">
+  <div class="pp-handle"></div>
+  <div class="pp-header">
+    <div class="pp-icon">🌈</div>
+    <div class="pp-titles">
+      <div class="pp-title">GiadaCourses</div>
+      <div class="pp-sub">Aggiungi l'app alla schermata home per usarla come un'app nativa — gratuita, veloce, sempre aggiornata!</div>
+    </div>
+    <button class="pp-close" onclick="pwaClose()" aria-label="Chiudi">✕</button>
+  </div>
+
+  <!-- Steps Android -->
+  <div id="pp-android" style="display:none">
+    <div class="pp-steps">
+      <div class="pp-step">
+        <div class="pp-step-num">1</div>
+        <div class="pp-step-text"><strong>Tocca il pulsante qui sotto</strong>Chrome mostrerà il pop-up di installazione</div>
+      </div>
+      <div class="pp-step">
+        <div class="pp-step-num">2</div>
+        <div class="pp-step-text"><strong>Tocca "Installa" nel popup</strong>L'app verrà aggiunta alla schermata home automaticamente</div>
+      </div>
+    </div>
+    <button class="pp-btn" id="pp-android-btn" onclick="pwaInstallAndroid()">📲 Aggiungi alla Home — 1 tap!</button>
+  </div>
+
+  <!-- Steps iOS -->
+  <div id="pp-ios" style="display:none">
+    <div class="pp-steps">
+      <div class="pp-step">
+        <div class="pp-step-num">1</div>
+        <div class="pp-step-text"><strong>Apri questa pagina in Safari</strong>L'installazione funziona solo con Safari su iPhone/iPad</div>
+      </div>
+      <div class="pp-step">
+        <div class="pp-step-num">2</div>
+        <div class="pp-step-text"><strong>Tocca il tasto Condividi ⎙</strong>L'icona quadrata con la freccia ↑ in basso nella barra Safari</div>
+      </div>
+      <div class="pp-step">
+        <div class="pp-step-num">3</div>
+        <div class="pp-step-text"><strong>Scorri e tocca "Aggiungi a Home" ➕</strong>Conferma con "Aggiungi" in alto a destra</div>
+      </div>
+      <div class="pp-step">
+        <div class="pp-step-num">4</div>
+        <div class="pp-step-text"><strong>Apri dall'icona 🎉</strong>GiadaCourses ora funziona come un'app nativa!</div>
+      </div>
+    </div>
+    <button class="pp-btn" onclick="pwaClose()">✅ Capito, lo faccio adesso!</button>
+  </div>
+
+  <!-- Generic fallback -->
+  <div id="pp-generic" style="display:none">
+    <div class="pp-steps">
+      <div class="pp-step">
+        <div class="pp-step-num">⋮</div>
+        <div class="pp-step-text"><strong>Apri il menu del browser</strong>Tocca i tre puntini ⋮ o ··· in alto a destra</div>
+      </div>
+      <div class="pp-step">
+        <div class="pp-step-num">➕</div>
+        <div class="pp-step-text"><strong>Tocca "Aggiungi a schermata Home"</strong>oppure "Installa app"</div>
+      </div>
+    </div>
+    <button class="pp-btn" onclick="pwaClose()">✅ Ok, grazie!</button>
+  </div>
+
+  <button class="pp-skip" onclick="pwaClose()">Continua senza installare →</button>
+</div>
+
+<!-- Floating pill — tap to open install panel -->
+<button id="pwa-pill" onclick="pwaShow()" aria-label="Installa app">
+  📲 Aggiungi alla Home
+  <span class="pill-close" onclick="event.stopPropagation();pwaDismiss()" aria-label="Chiudi">✕</span>
+</button>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-logo">🌈 GiadaCourses</div>
+  <div class="splash-sub">Social English Learning Platform</div>
+</div>
+
+<!-- TOP NAV -->
+<nav id="topnav">
+  <span class="nav-logo" onclick="showPage('home')" style="display:flex;align-items:center;gap:8px">
+    <img src="/icons/icon-192.png" alt="GC" style="width:32px;height:32px;border-radius:10px;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'">
+    Giada<span>Courses</span>
+  </span>
+  <span id="streak-chip" class="streak-chip hidden">🔥 <span id="streak-n">0</span></span>
+  <button id="nav-user-btn"></button>
+</nav>
+
+<!-- PAGES -->
+<div id="page-home" class="page active"><div class="container" id="home-content"></div></div>
+<div id="page-exercises" class="page"><div class="container" id="exercises-content"></div></div>
+<div id="page-games" class="page"><div class="container" id="games-content"></div></div>
+<div id="page-social" class="page"><div class="container" id="social-content"></div></div>
+<div id="page-news" class="page"><div class="container" id="news-content"></div></div>
+<div id="page-profile" class="page"><div class="container" id="profile-content"></div></div>
+<div id="page-leaderboard" class="page"><div class="container" id="lb-content"></div></div>
+<div id="page-admin" class="page"><div class="container" id="admin-content"></div></div>
+<div id="page-superadmin" class="page"><div class="container" id="sa-content"></div></div>
+
+<!-- DM OVERLAY -->
+<div id="dm-overlay" class="dm-overlay">
+  <div class="dm-sheet" id="dm-sheet">
+    <!-- contenuto iniettato da JS -->
+  </div>
+</div>
+
+<!-- ── CALL OVERLAY ── -->
+<div id="call-overlay" class="call-overlay">
+  <video id="call-remote-video" class="call-remote-video" autoplay playsinline></video>
+  <video id="call-local-video" class="call-local-video" autoplay playsinline muted></video>
+  <div class="call-header">
+    <div id="call-avatar-el" class="call-avatar">👤</div>
+    <div class="call-name-lbl" id="call-name-lbl"></div>
+    <div class="call-status-lbl" id="call-status-lbl">In attesa...</div>
+  </div>
+  <div class="call-monitor-chip" id="call-monitor-chip" style="display:none">👁 Monitoraggio silenzioso</div>
+  <div class="call-controls">
+    <button class="call-btn call-btn-toggle" id="call-mute-btn" onclick="callToggleMic()" title="Microfono">🎤</button>
+    <button class="call-btn call-btn-end" onclick="callEnd()" title="Termina">📵</button>
+    <button class="call-btn call-btn-toggle" id="call-vid-btn" onclick="callToggleVideo()" title="Camera">📷</button>
+  </div>
+</div>
+
+<!-- ── LIVE OVERLAY ── -->
+<div id="live-overlay" class="live-overlay">
+  <div class="live-video-wrap" id="live-video-wrap">
+    <video id="live-video-el" autoplay playsinline></video>
+    <div class="live-top-bar">
+      <span class="live-badge">LIVE</span>
+      <span id="live-title-lbl" style="color:#fff;font-weight:700;font-size:.88rem;flex:1;text-shadow:0 1px 4px rgba(0,0,0,.7);margin:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      <button onclick="closeLiveOverlay()" style="background:rgba(0,0,0,.4);border:none;border-radius:50%;width:34px;height:34px;color:#fff;font-size:.95rem;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);flex-shrink:0">✕</button>
+    </div>
+    <div class="live-viewer-pill" id="live-viewer-pill">👁 0</div>
+    <div class="live-host-controls" id="live-host-controls" style="display:none">
+      <button class="live-ctrl-btn" id="live-mic-btn" onclick="liveToggleMic()" style="background:rgba(255,255,255,.18);color:#fff">🎤</button>
+      <button class="live-ctrl-btn" onclick="liveEnd()" style="background:#FF3B30;color:#fff">⏹</button>
+      <button class="live-ctrl-btn" id="live-cam-btn" onclick="liveToggleCam()" style="background:rgba(255,255,255,.18);color:#fff">📷</button>
+    </div>
+    <!-- Viewer exit button — always visible for non-hosts -->
+    <div id="live-viewer-exit" style="display:none;position:absolute;bottom:calc(14px + var(--sab,0px));right:16px;z-index:5">
+      <button onclick="closeLiveOverlay()" style="background:rgba(0,0,0,.55);border:1.5px solid rgba(255,255,255,.25);border-radius:22px;padding:9px 18px;color:#fff;font-size:.83rem;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);display:flex;align-items:center;gap:6px">🚪 Esci dalla diretta</button>
+    </div>
+  </div>
+  <div class="live-comment-panel">
+    <div class="live-comments-scroll" id="live-comments-scroll"></div>
+    <div class="live-comment-row">
+      <input class="live-comment-inp" id="live-comment-inp" placeholder="Scrivi un commento live..." onkeydown="liveSendCommentKey(event)">
+      <button class="live-send-btn" onclick="liveSendComment()">➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHALLENGE 1v1 OVERLAY ── -->
+<div id="challenge-overlay" class="challenge-overlay">
+  <div class="ch-header">
+    <div class="ch-vs" id="ch-vs-header">
+      <!-- injected by JS -->
+    </div>
+    <button onclick="closeChallengeOverlay()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:34px;height:34px;color:#fff;cursor:pointer;flex-shrink:0;font-size:.9rem;margin-left:auto">✕</button>
+  </div>
+  <div class="ch-body" id="ch-body">
+    <!-- injected by JS -->
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav id="bottomnav">
+  <button class="bnav-item active" onclick="showPage('home')" data-p="home"><span class="bnav-icon">&#x1F3E0;</span><span class="bnav-label">Home</span></button>
+  <button class="bnav-item" onclick="showPage('exercises')" data-p="exercises"><span class="bnav-icon">&#x1F4DA;</span><span class="bnav-label">Esercizi</span></button>
+  <button class="bnav-item" onclick="showPage('games')" data-p="games"><span class="bnav-icon">&#x1F3AE;</span><span class="bnav-label">Giochi</span></button>
+  <button class="bnav-item" onclick="showPage('social')" data-p="social"><span class="bnav-icon">&#x1F4AC;</span><span class="bnav-label">Social</span></button>
+  <button class="bnav-item" onclick="showPage('news')" data-p="news"><span class="bnav-icon">&#x2728;</span><span class="bnav-label">Novita</span></button>
+  <button class="bnav-item" id="dm-nav-btn" onclick="openDM()" style="position:relative;display:none"><span class="bnav-icon">&#x2709;&#xFE0F;</span><span id="dm-nav-badge" class="dm-nav-badge" style="display:none">0</span><span class="bnav-label">Messaggi</span></button>
+</nav>
+
+<!-- AUTH MODAL -->
+<div id="auth-overlay">
+  <div class="auth-modal">
+    <button class="auth-close" onclick="closeAuth()">✕</button>
+    <h2>🌈 Benvenuto!</h2>
+    <p>Entra nella community di GiadaCourses</p>
+    <div class="auth-tabs">
+      <button class="auth-tab-btn active" id="tab-login-btn" onclick="switchTab('login')">Accedi</button>
+      <button class="auth-tab-btn" id="tab-reg-btn" onclick="switchTab('register')">Registrati</button>
+    </div>
+    <!-- LOGIN -->
+    <div id="login-form" class="auth-form">
+      <div class="auth-error-box" id="login-err"></div>
+      <div class="auth-field"><label>📧 Email</label><input type="email" id="l-email" placeholder="la-tua@email.com" autocomplete="email" oninput="clearAuthErr('login')"></div>
+      <div class="auth-field"><label>🔒 Password</label><input type="password" id="l-pwd" placeholder="••••••••" autocomplete="current-password" oninput="clearAuthErr('login')"></div>
+      <button class="auth-submit" id="login-submit-btn" onclick="doLogin()">🚀 Accedi</button>
+      <p style="text-align:center;font-size:.8rem;color:var(--muted)">Continua come <strong style="color:var(--coral);cursor:pointer" onclick="closeAuth()">ospite</strong> (senza salvare progressi)</p>
+    </div>
+    <!-- REGISTER -->
+    <div id="register-form" class="auth-form hidden">
+      <div class="auth-error-box" id="register-err"></div>
+      <div class="auth-field"><label>👤 Username</label><input type="text" id="r-username" placeholder="il_tuo_nome" oninput="clearAuthErr('register')"></div>
+      <div class="auth-field"><label>📧 Email</label><input type="email" id="r-email" placeholder="la-tua@email.com" oninput="clearAuthErr('register')"></div>
+      <div class="auth-field"><label>🔒 Password <small>(min. 6 caratteri)</small></label><input type="password" id="r-pwd" placeholder="••••••••" oninput="clearAuthErr('register')"></div>
+      <button class="opt-toggle-btn" onclick="toggleOptional()">➕ Aggiungi info profilo (facoltativo)</button>
+      <div class="opt-fields" id="opt-fields">
+        <div class="auth-field"><label>🌍 Lingua madre</label>
+          <select id="r-native"><option value="">— seleziona —</option><option value="it">Italiano</option><option value="es">Spagnolo</option><option value="fr">Francese</option><option value="de">Tedesco</option><option value="pt">Portoghese</option><option value="other">Altro</option></select>
+        </div>
+        <div class="auth-field"><label>📊 Livello attuale</label>
+          <select id="r-level"><option value="A1">A1 – Principiante</option><option value="A2">A2 – Elementare</option><option value="B1" selected>B1 – Intermedio</option><option value="B2">B2 – Intermedio avanzato</option><option value="C1">C1 – Avanzato</option><option value="C2">C2 – Madrelingua</option></select>
+        </div>
+        <div class="auth-field"><label>🎯 Obiettivo</label>
+          <select id="r-goal"><option value="">— seleziona —</option><option value="travel">Viaggi</option><option value="work">Lavoro</option><option value="study">Studio</option><option value="fun">Per piacere</option></select>
+        </div>
+        <div class="auth-field"><label>📍 Città</label><input type="text" id="r-city" placeholder="Es. Roma"></div>
+        <div class="auth-field"><label>📝 Bio breve</label><input type="text" id="r-bio" placeholder="Ciao, mi chiamo..."></div>
+      </div>
+      <div class="gdpr-note">🔒 <strong>Privacy:</strong> registrandoti accetti che i tuoi progressi vengano salvati sul server. I dati facoltativi sono visibili agli utenti registrati. Puoi eliminare l'account in qualsiasi momento.</div>
+      <button class="auth-submit" onclick="doRegister()">✨ Crea Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- USER PROFILE MODAL -->
+<div id="user-overlay">
+  <div class="user-modal" id="user-modal-inner"></div>
+</div>
+
+<!-- TOAST -->
+<div id="toast-container"></div>
+
+<!-- Socket.IO Client -->
+
+<script src="/js/app.js"></script>
+</body>
+</html>

@@ -502,11 +502,11 @@ module.exports = function(app) {
     const ch = activeChallenges.get(req.params.id);
     if (!ch || ch.status !== 'active') return res.status(404).json({ error: 'Sfida non attiva' });
     const { questionIndex, answerIndex, timeMs } = req.body;
-    if (questionIndex === undefined) return res.status(400).json({ error: 'Dati mancanti' });
+    if (questionIndex === undefined || answerIndex === undefined) return res.status(400).json({ error: 'Dati mancanti' });
     if (req.user._id !== ch.challengerId && req.user._id !== ch.challengeeId) return res.status(403).json({ error: 'Non partecipante' });
     if (!ch.scores[req.user._id]) ch.scores[req.user._id] = [];
     const myScores = ch.scores[req.user._id];
-    if (myScores[questionIndex] !== undefined) return res.json({ ok: true });
+    if (myScores[questionIndex] !== undefined) return res.json({ ok: true, correct: myScores[questionIndex].correct, points: myScores[questionIndex].points });
     if (questionIndex < 0 || questionIndex >= ch.questions.length) return res.status(400).json({ error: 'Domanda non valida' });
     const q = ch.questions[questionIndex];
     const correctIdx = parseInt(q.correctIndex ?? q.correct ?? 0) || 0;
@@ -517,20 +517,26 @@ module.exports = function(app) {
     ch.scores[req.user._id] = myScores;
     const opponentId = req.user._id === ch.challengerId ? ch.challengeeId : ch.challengerId;
     sseEmit(opponentId, 'challenge_opponent_answered', { challengeId: ch.id, questionIndex, correct, opponentTotal: myScores.reduce((s, x) => s + (x?.points || 0), 0) });
-    const myDone = myScores.length >= ch.questions.length;
-    const oppDone = (ch.scores[opponentId] || []).length >= ch.questions.length;
+    // Check completamento: entrambi i giocatori devono avere risposto a TUTTE le domande
+    const myDone = myScores.filter(x => x !== undefined && x !== null).length >= ch.questions.length;
+    const oppScores = ch.scores[opponentId] || [];
+    const oppDone = oppScores.filter(x => x !== undefined && x !== null).length >= ch.questions.length;
     let result = null;
-    if (myDone && oppDone) {
+    if (myDone && oppDone && ch.status === 'active') {
       ch.status = 'finished'; ch.finishedAt = Date.now();
+      const myTotal = myScores.reduce((s, x) => s + (x?.points || 0), 0);
+      const oppTotal = oppScores.reduce((s, x) => s + (x?.points || 0), 0);
       result = {
         [ch.challengerId]: ch.scores[ch.challengerId].reduce((s, x) => s + (x?.points || 0), 0),
         [ch.challengeeId]: ch.scores[ch.challengeeId].reduce((s, x) => s + (x?.points || 0), 0),
         challengerName: ch.challengerName, challengeeName: ch.challengeeName,
       };
       const winnerId = result[ch.challengerId] >= result[ch.challengeeId] ? ch.challengerId : ch.challengeeId;
+      const loserId = winnerId === ch.challengerId ? ch.challengeeId : ch.challengerId;
       result.winnerId = winnerId;
+      // XP: vincitore +50, perdente +20 (partecipazione)
       await db.users.updateAsync({ _id: winnerId }, { $inc: { xp: 50 } });
-      await db.users.updateAsync({ _id: (winnerId===ch.challengerId?ch.challengeeId:ch.challengerId) }, { $inc: { xp: 20 } });
+      await db.users.updateAsync({ _id: loserId }, { $inc: { xp: 20 } });
       sseEmit(ch.challengerId, 'challenge_finished', { challengeId: ch.id, result });
       sseEmit(ch.challengeeId, 'challenge_finished', { challengeId: ch.id, result });
       setTimeout(() => activeChallenges.delete(ch.id), 60000);
@@ -551,7 +557,9 @@ module.exports = function(app) {
     const servers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun.cloudflare.com:3478' },
+      { urls: 'stun:stun.stunprotocol.org:3478' },
     ];
     const turnSecret = process.env.TURN_SECRET || '';
     const serverIp = process.env.SERVER_IP || '';
@@ -559,14 +567,19 @@ module.exports = function(app) {
       const expiry = Math.floor(Date.now() / 1000) + 86400;
       const username = `${expiry}:giadacourses`;
       const credential = crypto.createHmac('sha1', turnSecret).update(username).digest('base64');
-      servers.push({ urls: `turn:${serverIp}:3478`, username, credential }, { urls: `turn:${serverIp}:3478?transport=tcp`, username, credential });
+      servers.push(
+        { urls: `turn:${serverIp}:3478`, username, credential },
+        { urls: `turn:${serverIp}:3478?transport=tcp`, username, credential },
+        { urls: `turns:${serverIp}:5349?transport=tcp`, username, credential }
+      );
     }
+    // Metered.ca TURN (fallback pubblico)
     servers.push(
       { urls: 'turn:a.relay.metered.ca:80', username: 'e13b6accfab44ae88f8b4cf1', credential: 'k4VxHyVntypMId/S' },
       { urls: 'turn:a.relay.metered.ca:443', username: 'e13b6accfab44ae88f8b4cf1', credential: 'k4VxHyVntypMId/S' },
       { urls: 'turns:a.relay.metered.ca:443?transport=tcp', username: 'e13b6accfab44ae88f8b4cf1', credential: 'k4VxHyVntypMId/S' },
     );
-    res.json({ iceServers: servers });
+    res.json({ iceServers: servers, iceTransportPolicy: 'all', iceCandidatePoolSize: 5 });
   });
 
   // Esporta state per Socket.IO handlers

@@ -1,18 +1,20 @@
-// middleware/index.js — Auth + Security middleware
+// middleware/index.js — Auth + Security middleware (HARDENED v10.1)
 const { db } = require('../lib/db');
 
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 giorni
 
 async function resolveToken(raw) {
   const token = (raw || '').replace('Bearer ', '').trim();
-  if (!token) return null;
+  if (!token || token.length < 10 || token.length > 256) return null;
   const session = await db.sessions.findOneAsync({ token });
   if (!session) return null;
   if (session.createdAt && (Date.now() - session.createdAt > SESSION_MAX_AGE_MS)) {
     await db.sessions.removeAsync({ token }, {});
     return null;
   }
-  return await db.users.findOneAsync({ _id: session.userId });
+  const user = await db.users.findOneAsync({ _id: session.userId });
+  if (!user || user.banned) return null;
+  return user;
 }
 
 async function authMiddleware(req, res, next) {
@@ -32,6 +34,23 @@ function requireRole(...roles) {
   };
 }
 
+// Input sanitizer — previene XSS injection nei body JSON
+function sanitizeInput(obj) {
+  if (typeof obj === 'string') {
+    return obj.replace(/[<>]/g, c => c === '<' ? '&lt;' : '&gt;').slice(0, 10000);
+  }
+  if (Array.isArray(obj)) return obj.map(sanitizeInput);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (k === 'passwordHash' || k === 'password' || k === 'currentPassword' || k === 'newPassword') { out[k] = v; continue; }
+      out[k] = sanitizeInput(v);
+    }
+    return out;
+  }
+  return obj;
+}
+
 // Security middleware setup
 function setupSecurity(app) {
   let helmet, rateLimit;
@@ -42,15 +61,21 @@ function setupSecurity(app) {
 
   // Helmet
   if (helmet) {
-    app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+    app.use(helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    }));
   }
 
-  // Security headers manuali
+  // Security headers
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
     next();
   });
 
@@ -67,13 +92,21 @@ function setupSecurity(app) {
     next();
   });
 
+  // Input sanitization per tutti i POST/PUT
+  app.use((req, res, next) => {
+    if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+      req.body = sanitizeInput(req.body);
+    }
+    next();
+  });
+
   // Rate Limiting
   if (rateLimit) {
-    app.use('/api/auth/login', rateLimit({ windowMs: 15*60*1000, max: 10, message: { error: 'Troppi tentativi. Riprova tra 15 minuti.' } }));
-    app.use('/api/auth/register', rateLimit({ windowMs: 60*60*1000, max: 5, message: { error: 'Troppe registrazioni. Riprova tra un\'ora.' } }));
-    app.use('/api/', rateLimit({ windowMs: 60*1000, max: 200, message: { error: 'Troppe richieste.' } }));
-    app.use('/api/media/', rateLimit({ windowMs: 60*1000, max: 30, message: { error: 'Troppi upload.' } }));
-    console.log('[OK] Rate limiting attivo');
+    app.use('/api/auth/login', rateLimit({ windowMs: 15*60*1000, max: 8, message: { error: 'Troppi tentativi. Riprova tra 15 minuti.' }, standardHeaders: true, legacyHeaders: false }));
+    app.use('/api/auth/register', rateLimit({ windowMs: 60*60*1000, max: 4, message: { error: 'Troppe registrazioni. Riprova tra un\'ora.' }, standardHeaders: true, legacyHeaders: false }));
+    app.use('/api/media/', rateLimit({ windowMs: 60*1000, max: 20, message: { error: 'Troppi upload.' } }));
+    app.use('/api/', rateLimit({ windowMs: 60*1000, max: 180, message: { error: 'Troppe richieste.' } }));
+    console.log('[OK] Rate limiting attivo (hardened)');
   } else {
     console.log('[WARN] express-rate-limit non installato. Esegui: npm install express-rate-limit helmet');
   }
@@ -93,7 +126,7 @@ function logMiddleware(req, res, next) {
   if (req.path.startsWith('/api/') && req.method !== 'GET') {
     const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     const ip = rawIp.split(',')[0].trim().replace('::ffff:', '').replace('::1', '127.0.0.1');
-    db.logs.insertAsync({ ip, userId: req.user?._id || null, username: req.user?.username || 'Ospite', action: `${req.method} ${req.path}`, timestamp: Date.now(), device: req.headers['user-agent'] || '' }).catch(() => {});
+    db.logs.insertAsync({ ip, userId: req.user?._id || null, username: req.user?.username || 'Ospite', action: `${req.method} ${req.path}`, timestamp: Date.now(), device: (req.headers['user-agent'] || '').slice(0, 300) }).catch(() => {});
   }
   next();
 }

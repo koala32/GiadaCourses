@@ -319,12 +319,18 @@ module.exports = function(app, sharedState) {
   });
   app.get('/api/admin/stats', requireAuth, requireRole('superadmin'), async (req, res) => {
     const since24h = Date.now()-86400000;
+    // recentLogs: ultime azioni loggati (IP log)
+    const recentLogs = (await db.logs.findAsync({ type: { $ne: 'client_log' } }))
+      .sort((a,b) => b.timestamp - a.timestamp).slice(0, 50);
+    // activeSessions nelle ultime 24h
+    const activeSessions = await db.sessions.countAsync({ createdAt: { $gt: since24h } });
     res.json({
       totalUsers: await db.users.countAsync({ role:'user' }), totalAdmins: await db.users.countAsync({ role:'admin' }),
       totalPosts: await db.posts.countAsync({}), totalExer: await db.exercises.countAsync({}),
       totalComments: await db.comments.countAsync({}), totalMessages: await db.messages.countAsync({}),
       totalStories: await db.stories.countAsync({}), totalGroups: await db.groups.countAsync({}),
       recentUsers: await db.users.countAsync({ joinDate:{$gt:since24h} }), recentPosts: await db.posts.countAsync({ timestamp:{$gt:since24h} }),
+      recentLogs, activeSessions,
     });
   });
   app.get('/api/admin/messages', requireAuth, requireRole('superadmin'), async (req, res) => {

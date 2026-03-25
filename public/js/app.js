@@ -67,7 +67,7 @@ function showPage(p){
   window.scrollTo(0,0);
   currentPage=p;
   const bn=document.querySelector(`.bnav-item[data-p="${p}"]`);
-  if(bn)bn.classList.add('active');
+  if(bn){bn.classList.add('active');bn.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}
   const R={home:renderHome,exercises:renderExercises,games:renderGames,social:renderSocial,news:renderNews,profile:renderProfile,leaderboard:renderLeaderboard,admin:renderAdmin,superadmin:renderSuperadmin};
   if(R[p]){
     const maybePromise=R[p]();
@@ -871,6 +871,13 @@ async function renderProfile(){
     <div class="section-title">🏅 Badge</div>
     <div class="badges-grid">
       ${BADGES_DEF.map(b=>`<div class="badge-item${(ME.badges||[]).includes(b.e)?'':' locked'}"><div class="be">${b.e}</div><div class="bn">${b.n}</div></div>`).join('')}
+    </div>
+    <div class="settings-card">
+      <h3>🎨 Aspetto</h3>
+      <div class="dark-toggle-wrap">
+        <span class="dark-toggle-label">🌙 Modalita scura</span>
+        <button class="dark-toggle${document.documentElement.getAttribute('data-theme')==='dark'?' on':''}" id="dark-mode-toggle" onclick="toggleDarkMode();this.classList.toggle('on')"></button>
+      </div>
     </div>
     <div class="settings-card">
       <h3>⚙️ Modifica Profilo</h3>
@@ -1892,7 +1899,7 @@ async function renderSuperadmin(){
       body.innerHTML=`
         <div class="sa-grid">
           <div class="sa-metric"><div class="sa-val">${stats.totalUsers}</div><div class="sa-lbl">👥 Utenti</div><div class="sa-trend">+${stats.recentUsers} oggi</div></div>
-          <div class="sa-metric t2"><div class="sa-val">${stats.activeSessions}</div><div class="sa-lbl">🟢 Sessioni 24h</div></div>
+          <div class="sa-metric t2"><div class="sa-val">${stats.activeSessions||0}</div><div class="sa-lbl">🟢 Sessioni 24h</div></div>
           <div class="sa-metric t3"><div class="sa-val">${stats.totalPosts}</div><div class="sa-lbl">💬 Post</div><div class="sa-trend">+${stats.recentPosts} oggi</div></div>
           <div class="sa-metric t4"><div class="sa-val">${stats.totalExer}</div><div class="sa-lbl">📚 Esercizi</div></div>
         </div>
@@ -1951,11 +1958,12 @@ async function renderSuperadmin(){
       </div>`;
     } else if(saTab==='logs'){
       const stats=await GET('/api/admin/stats');
+      const logs = stats.recentLogs || [];
       body.innerHTML=`<div class="card">
         <h3 style="font-family:var(--fh);font-size:1.1rem;margin-bottom:12px">🌐 Log Accessi Recenti</h3>
         <div style="font-size:.76rem;color:var(--muted);margin-bottom:10px">⚠️ Il tracciamento degli IP richiede consenso GDPR esplicito degli utenti.</div>
-        ${stats.recentLogs.length===0?`<div class="empty-state" style="padding:20px"><div class="ei">📋</div><h3>Nessuna attività ancora</h3></div>`:
-          stats.recentLogs.slice(0,30).map(log=>`
+        ${logs.length===0?`<div class="empty-state" style="padding:20px"><div class="ei">📋</div><h3>Nessuna attivita ancora</h3></div>`:
+          logs.slice(0,30).map(log=>`
           <div class="ip-row">
             <span class="ip-addr">${escHTML(log.ip||'?')}</span>
             <div class="ip-info"><strong>${escHTML(log.username||'?')}</strong> · ${escHTML(log.action||'')}</div>
@@ -2031,7 +2039,7 @@ async function loadStories(){
     let html='';
     if(ME){
       html+=`<div class="story-bubble" onclick="openStoryCreator()">
-        <div class="story-ring add-new"><div class="story-ring-inner" style="font-size:1.6rem">➕</div></div>
+        <div class="story-ring add-new"><div class="story-ring-inner" style="font-size:1.4rem;font-weight:900;color:var(--teal)">+</div></div>
         <span class="story-label">La tua storia</span>
       </div>`;
     }
@@ -2190,14 +2198,16 @@ function showStoryTutorialAgain(){
 }
 
 const STORY_TEMPLATES=[
-  {id:'gc1',bg:'linear-gradient(135deg,#9C7CFF,#FF9ECD)',emoji:'💜'},
-  {id:'gc2',bg:'linear-gradient(135deg,#FF9ECD,#FFD700)',emoji:'🌸'},
-  {id:'gc3',bg:'linear-gradient(135deg,#4ADE80,#22C55E)',emoji:'🌿'},
-  {id:'gc4',bg:'linear-gradient(160deg,#1E1E3F,#9C7CFF)',emoji:'✨'},
-  {id:'gc5',bg:'linear-gradient(135deg,#FF9ECD,#FF6B6B)',emoji:'🔥'},
-  {id:'gc6',bg:'linear-gradient(135deg,#74B9FF,#9C7CFF)',emoji:'🌊'},
-  {id:'gc7',bg:'linear-gradient(135deg,#FFD700,#FF9ECD)',emoji:'⭐'},
-  {id:'gc8',bg:'#1a1a2e',emoji:'🌙'},
+  {id:'gc1',bg:'linear-gradient(135deg,#9C7CFF,#FF9ECD)',label:'Viola'},
+  {id:'gc2',bg:'linear-gradient(135deg,#FF9ECD,#FFD700)',label:'Rosa'},
+  {id:'gc3',bg:'linear-gradient(135deg,#4ADE80,#22C55E)',label:'Verde'},
+  {id:'gc4',bg:'linear-gradient(160deg,#1E1E3F,#9C7CFF)',label:'Notte'},
+  {id:'gc5',bg:'linear-gradient(135deg,#FF6B6B,#FF9F43)',label:'Fuoco'},
+  {id:'gc6',bg:'linear-gradient(135deg,#74B9FF,#9C7CFF)',label:'Oceano'},
+  {id:'gc7',bg:'linear-gradient(135deg,#FFD700,#FF6B6B)',label:'Sole'},
+  {id:'gc8',bg:'linear-gradient(180deg,#0a0a1a,#1a1a3a)',label:'Buio'},
+  {id:'gc9',bg:'linear-gradient(135deg,#667eea,#764ba2)',label:'Indigo'},
+  {id:'gc10',bg:'linear-gradient(135deg,#f093fb,#f5576c)',label:'Candy'},
 ];
 
 function openStoryTemplates(){
@@ -2210,7 +2220,7 @@ function openStoryTemplates(){
     const el=document.createElement('div');
     el.className='sc-template-item';
     el.style.cssText=`background:${t.bg};`;
-    el.innerHTML=`<span style="font-size:1.5rem">${t.emoji}</span>`;
+    el.innerHTML=`<span style="font-size:.65rem;color:#fff;font-weight:800;text-shadow:0 1px 4px rgba(0,0,0,.4)">${t.label||''}</span>`;
     el.onclick=()=>{
       grid.querySelectorAll('.sc-template-item').forEach(x=>x.classList.remove('selected'));
       el.classList.add('selected');
@@ -2223,8 +2233,7 @@ function openStoryTemplates(){
         const ph=preview.querySelector('#sc-placeholder');
         if(ph)ph.style.display='none';
         let existing=preview.querySelector('.sc-template-overlay');
-        if(!existing){existing=document.createElement('div');existing.className='sc-template-overlay';existing.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:4rem;pointer-events:none';preview.appendChild(existing);}
-        existing.textContent=t.emoji;
+        if(existing) existing.remove();
       }
       // Show tools
       const tools=document.getElementById('sc-tools');
@@ -2469,7 +2478,7 @@ function showStory(){
   const bgMedia=story.mediaType==='video'
     ?`<video src="${story.mediaUrl}" autoplay muted loop playsinline style="pointer-events:none"></video>`
     :story.mediaType==='template'||!story.mediaUrl
-    ?`<div style="position:absolute;inset:0;background:${story.bgTemplate||'linear-gradient(135deg,#9C7CFF,#FF9ECD)'};display:flex;align-items:center;justify-content:center;font-size:5rem;pointer-events:none"></div>`
+    ?`<div style="position:absolute;inset:0;background:${story.bgTemplate||'linear-gradient(135deg,#9C7CFF,#FF9ECD)'};pointer-events:none"></div>`
     :`<img src="${story.mediaUrl}" alt="" style="pointer-events:none" onerror="this.parentElement.style.background='linear-gradient(135deg,#9C7CFF,#FF9ECD)'">`;
 
   const filterCSS=story.filter&&story.filter!=='none'?`style="filter:${story.filter}"`:'';
@@ -3133,6 +3142,7 @@ async function loadIceConfig(){
     const r=await GET('/api/ice-servers');
     if(r&&r.iceServers&&r.iceServers.length){
       ICE_SERVERS.iceServers=r.iceServers;
+      if(r.iceCandidatePoolSize) ICE_SERVERS.iceCandidatePoolSize=r.iceCandidatePoolSize;
       console.log('[ICE] Config caricata dal server:', r.iceServers.length,'servers');
     }
   }catch{}
@@ -3752,6 +3762,13 @@ function showChallengeWaiting(cid, oppId, oppName, oppAvatar) {
       <button onclick="closeChallengeOverlay()" style="margin-top:24px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:14px;padding:10px 22px;cursor:pointer;font-size:.86rem">Annulla</button>
     </div>`;
   renderChallengeVsHeader(ME.username, ME.avatar || '👤', oppName, oppAvatar || '👤', 0, 0);
+  // Safety timeout: se dopo 60s nessuno accetta, chiudi
+  challengeState._waitTimeout = setTimeout(() => {
+    if (challengeState?._waiting && challengeState?.id === cid) {
+      closeChallengeOverlay();
+      toast('Sfida scaduta — nessuna risposta', 'info', 3000);
+    }
+  }, 60000);
 }
 
 function renderChallengeVsHeader(myName, myAv, oppName, oppAv, myPts, oppPts) {
@@ -3947,6 +3964,7 @@ function showChallengeResult(result) {
 
 function closeChallengeOverlay() {
   clearInterval(challengeState?.timerInterval);
+  clearTimeout(challengeState?._waitTimeout);
   challengeState = null;
   document.getElementById('challenge-overlay')?.classList.remove('active');
 }

@@ -392,20 +392,19 @@ function renderSocialCreator(){
       </div>
     </div>`;
   } else if(_socialTab === 'reel'){
-    box.innerHTML = `<div class="create-post-box">
-      <div style="font-weight:700;font-size:.88rem;margin-bottom:10px;color:var(--dark)">Crea un Reel</div>
-      <textarea class="post-textarea" id="new-reel-caption" rows="1" placeholder="Didascalia (opzionale)..."></textarea>
-      <div id="reel-media-preview"></div>
-      <div class="upload-btn-row">
-        <label class="upload-btn" for="reel-img-input">Foto</label>
-        <input type="file" id="reel-img-input" accept="image/*" style="display:none" onchange="handleReelMedia(this,'image')">
-        <label class="upload-btn" for="reel-vid-input">Video</label>
-        <input type="file" id="reel-vid-input" accept="video/*" style="display:none" onchange="handleReelMedia(this,'video')">
-        <label class="upload-btn" for="reel-cam-input">Scatta</label>
-        <input type="file" id="reel-cam-input" accept="image/*" capture="environment" style="display:none" onchange="handleReelMedia(this,'image')">
-        <button class="btn-primary btn-sm" onclick="createReelPost()" style="width:auto;padding:9px 22px;margin-left:auto">Pubblica Reel</button>
-      </div>
-    </div>`;
+    box.innerHTML = '<div class="create-post-box">'
+      + '<div style="font-weight:700;font-size:.88rem;margin-bottom:10px;color:var(--dark)">Crea un Reel</div>'
+      + '<textarea class="post-textarea" id="new-reel-caption" rows="1" placeholder="Didascalia (opzionale)..."></textarea>'
+      + '<div id="reel-media-preview" style="display:flex;gap:8px;overflow-x:auto;padding:8px 0;scrollbar-width:none"></div>'
+      + '<div class="upload-btn-row">'
+      + '<label class="upload-btn" for="reel-img-input">Foto</label>'
+      + '<input type="file" id="reel-img-input" accept="image/*" multiple style="display:none" onchange="handleReelMediaMulti(this,\'image\')">'
+      + '<label class="upload-btn" for="reel-vid-input">Video</label>'
+      + '<input type="file" id="reel-vid-input" accept="video/*" multiple style="display:none" onchange="handleReelMediaMulti(this,\'video\')">'
+      + '<label class="upload-btn" for="reel-cam-input">Scatta</label>'
+      + '<input type="file" id="reel-cam-input" accept="image/*" capture="environment" style="display:none" onchange="handleReelMediaMulti(this,\'image\')">'
+      + '<button class="btn-primary btn-sm" onclick="createReelPost()" style="width:auto;padding:9px 22px;margin-left:auto">Pubblica Reel</button>'
+      + '</div></div>';
   } else {
     box.innerHTML = `<div style="background:rgba(156,124,255,.06);border:2px solid rgba(156,124,255,.15);border-radius:var(--rs);padding:14px 16px;margin-bottom:14px">
       <div style="font-weight:700;font-size:.88rem;color:var(--purple);margin-bottom:4px">Risultati Esercizi</div>
@@ -414,21 +413,51 @@ function renderSocialCreator(){
   }
 }
 
-let pendingReelMedia = null;
-function handleReelMedia(input, type){
-  const file = input.files?.[0];
-  if(!file) return;
-  pendingReelMedia = { file, type };
-  const preview = document.getElementById('reel-media-preview');
-  if(!preview) return;
-  const url = URL.createObjectURL(file);
-  if(type === 'image'){
-    preview.innerHTML = '<div style="position:relative;margin-top:10px"><img src="'+url+'" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;display:block"><button class="media-remove-btn" onclick="removeReelMedia()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center">x</button></div>';
-  } else {
-    preview.innerHTML = '<div style="position:relative;margin-top:10px"><video src="'+url+'" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;display:block" playsinline muted></video><button class="media-remove-btn" onclick="removeReelMedia()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center">x</button><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.5rem;color:rgba(255,255,255,.8);pointer-events:none;border-radius:12px;background:rgba(0,0,0,.2)">&#9654;</div></div>';
+let pendingReelMedia = []; // Array of {file, type, url}
+
+function handleReelMediaMulti(input, type){
+  var files = input.files;
+  if(!files||!files.length) return;
+  for(var fi=0; fi<files.length; fi++){
+    var file = files[fi];
+    var url = URL.createObjectURL(file);
+    pendingReelMedia.push({ file: file, type: type, url: url });
   }
+  input.value = '';
+  renderReelPreviews();
 }
-function removeReelMedia(){ pendingReelMedia=null; const p=document.getElementById('reel-media-preview'); if(p)p.innerHTML=''; }
+
+function renderReelPreviews(){
+  var preview = document.getElementById('reel-media-preview');
+  if(!preview) return;
+  var html = '';
+  for(var i=0; i<pendingReelMedia.length; i++){
+    var m = pendingReelMedia[i];
+    html += '<div style="position:relative;flex-shrink:0;width:90px;height:90px;border-radius:10px;overflow:hidden;background:#000">';
+    if(m.type === 'image'){
+      html += '<img src="'+m.url+'" style="width:100%;height:100%;object-fit:cover">';
+    } else {
+      html += '<video src="'+m.url+'" style="width:100%;height:100%;object-fit:cover" muted></video>';
+      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8);font-size:1.2rem;background:rgba(0,0,0,.2)">&#9654;</div>';
+    }
+    html += '<button onclick="removeReelItem('+i+')" style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center">x</button>';
+    html += '<div style="position:absolute;bottom:3px;left:3px;background:rgba(0,0,0,.6);color:#fff;border-radius:8px;padding:1px 6px;font-size:.6rem;font-weight:700">'+(i+1)+'/'+pendingReelMedia.length+'</div>';
+    html += '</div>';
+  }
+  preview.innerHTML = html;
+}
+
+function removeReelItem(idx){
+  if(pendingReelMedia[idx] && pendingReelMedia[idx].url) URL.revokeObjectURL(pendingReelMedia[idx].url);
+  pendingReelMedia.splice(idx, 1);
+  renderReelPreviews();
+}
+
+function removeReelMedia(){ 
+  for(var i=0;i<pendingReelMedia.length;i++){if(pendingReelMedia[i] && pendingReelMedia[i].url)URL.revokeObjectURL(pendingReelMedia[i].url);}
+  pendingReelMedia=[]; 
+  var p=document.getElementById('reel-media-preview'); if(p)p.innerHTML=''; 
+}
 
 async function createThreadPost(){
   if(!ME){openAuth();return;}
@@ -444,25 +473,34 @@ async function createThreadPost(){
 
 async function createReelPost(){
   if(!ME){openAuth();return;}
-  if(!pendingReelMedia){toast('Aggiungi una foto o un video per creare un Reel!','error');return;}
+  if(!pendingReelMedia.length){toast('Aggiungi almeno una foto o un video!','error');return;}
+  var btn = document.querySelector('[onclick="createReelPost()"]');
+  if(btn){btn.disabled=true;btn.textContent='Caricamento...';}
   try{
-    let mediaUrl=null, mediaType=null;
-    const fd=new FormData();
-    const tok=localStorage.getItem('gc_token');
-    if(pendingReelMedia.blob) fd.append('file', pendingReelMedia.blob, 'reel.jpg');
-    else fd.append('file', pendingReelMedia.file);
-    toast('Caricamento reel...','info',5000);
-    const r=await fetch('/api/media/upload',{method:'POST',headers:{'Authorization':'Bearer '+tok},body:fd});
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.error||'Upload fallito');
-    mediaUrl=d.url; mediaType=d.type;
-    const caption=document.getElementById('new-reel-caption')?.value?.trim()||'';
-    await POST('/api/posts',{text:caption, mediaUrl, mediaType, postType:'reel'});
+    var uploadedMedia = [];
+    var tok = localStorage.getItem('gc_token');
+    for(var i=0; i<pendingReelMedia.length; i++){
+      var m = pendingReelMedia[i];
+      var fd = new FormData();
+      fd.append('file', m.file);
+      toast('Caricamento '+(i+1)+'/'+pendingReelMedia.length+'...','info',3000);
+      var r = await fetch('/api/media/upload',{method:'POST',headers:{'Authorization':'Bearer '+tok},body:fd});
+      var d = await r.json();
+      if(!r.ok) throw new Error(d.error||'Upload fallito');
+      uploadedMedia.push({url: d.url, type: d.type || m.type});
+    }
+    var caption = document.getElementById('new-reel-caption')?.value?.trim()||'';
+    if(uploadedMedia.length === 1){
+      await POST('/api/posts',{text:caption, mediaUrl:uploadedMedia[0].url, mediaType:uploadedMedia[0].type, postType:'reel'});
+    } else {
+      await POST('/api/posts',{text:caption, mediaUrl:uploadedMedia[0].url, mediaType:uploadedMedia[0].type, mediaUrls:uploadedMedia, postType:'reel'});
+    }
     removeReelMedia();
     if(document.getElementById('new-reel-caption')) document.getElementById('new-reel-caption').value='';
     toast('Reel pubblicato!');
     await loadFeedByType('reel');
   }catch(e){toast(e.message,'error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='Pubblica Reel';}}
 }
 
 async function loadFeedByType(type){
@@ -492,43 +530,96 @@ async function loadFeedByType(type){
 
 function renderReelCard(p){
   if(!p||!p._id)return '';
-  const a=p.author||{username:'Utente',avatar:'👤',_id:'',avatarUrl:''};
-  const liked=ME&&(p.likes||[]).includes(ME._id);
-  const lcount=(p.likes||[]).length;
-  const canDel=ME&&(ME._id===p.userId||['admin','superadmin'].includes(ME.role));
-  let mediaHtml = '';
-  if(p.mediaUrl && p.mediaUrl.startsWith('/')){
-    if(p.mediaType==='video'){
-      mediaHtml = '<div class="reel-media-box" onclick="toggleReelVideo(this)"><video src="'+p.mediaUrl+'" playsinline preload="metadata" muted loop style="width:100%;height:100%;object-fit:cover"></video><div class="reel-play-icon">&#9654;</div></div>';
+  var a=p.author||{username:'Utente',avatar:'\u{1F464}',_id:'',avatarUrl:''};
+  var liked=ME&&(p.likes||[]).includes(ME._id);
+  var lcount=(p.likes||[]).length;
+  var canDel=ME&&(ME._id===p.userId||ME.role==='admin'||ME.role==='superadmin');
+  var allMedia = [];
+  if(p.mediaUrls && p.mediaUrls.length > 1){
+    for(var mi=0;mi<p.mediaUrls.length;mi++) allMedia.push(p.mediaUrls[mi]);
+  } else if(p.mediaUrl && p.mediaUrl.startsWith('/')){
+    allMedia.push({url:p.mediaUrl, type:p.mediaType||'image'});
+  }
+  var mediaHtml = '';
+  if(allMedia.length > 1){
+    var slides = '';
+    for(var si=0;si<allMedia.length;si++){
+      var mm = allMedia[si];
+      if(mm.type==='video'){
+        slides += '<div class="reel-slide"><video src="'+mm.url+'" playsinline preload="metadata" muted loop style="width:100%;height:100%;object-fit:cover" onclick="toggleReelVideo(this.closest(\'.reel-media-box\'))"></video><div class="reel-play-icon">\u25b6</div></div>';
+      } else {
+        slides += '<div class="reel-slide"><img src="'+mm.url+'" style="width:100%;height:100%;object-fit:cover" loading="lazy" onclick="openLightbox(\''+mm.url+'\')"></div>';
+      }
+    }
+    mediaHtml = '<div class="reel-media-box"><div class="reel-carousel" id="rc-'+p._id+'" data-idx="0" style="display:flex;width:100%;height:100%;transition:transform .3s ease">'+slides+'</div>';
+    mediaHtml += '<div class="reel-counter" id="rcn-'+p._id+'">1/'+allMedia.length+'</div>';
+    mediaHtml += '<div class="reel-dots" id="rcd-'+p._id+'">';
+    for(var di=0;di<allMedia.length;di++) mediaHtml += '<span class="reel-dot'+(di===0?' active':'')+'"></span>';
+    mediaHtml += '</div></div>';
+  } else if(allMedia.length === 1){
+    var sm = allMedia[0];
+    if(sm.type==='video'){
+      mediaHtml = '<div class="reel-media-box" onclick="toggleReelVideo(this)"><video src="'+sm.url+'" playsinline preload="metadata" muted loop style="width:100%;height:100%;object-fit:cover"></video><div class="reel-play-icon">\u25b6</div></div>';
     } else {
-      mediaHtml = '<div class="reel-media-box" onclick="openLightbox(\''+p.mediaUrl+'\')"><img src="'+p.mediaUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'"></div>';
+      mediaHtml = '<div class="reel-media-box" onclick="openLightbox(\''+sm.url+'\')"><img src="'+sm.url+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'"></div>';
     }
   }
   return '<div class="feed-post reel-card" id="post-'+p._id+'">'
     + '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px 8px">'
-    + '<div class="avatar-circle" style="width:34px;height:34px;background:'+pickColor(a.username)+';cursor:pointer;font-size:.85rem;overflow:hidden;flex-shrink:0" onclick="viewUser(\''+a._id+'\')">'+(a.avatarUrl?'<img src="'+a.avatarUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':a.avatar||initials(a.username))+'</div>'
+    + '<div class="avatar-circle" style="width:34px;height:34px;background:'+pickColor(a.username)+';cursor:pointer;font-size:.85rem;overflow:hidden;flex-shrink:0" onclick="viewUser(\''+a._id+'\')">'+( a.avatarUrl?'<img src="'+a.avatarUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':a.avatar||initials(a.username))+'</div>'
     + '<div style="flex:1;min-width:0"><strong style="font-size:.85rem;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHTML(a.username)+'</strong><span style="font-size:.68rem;color:var(--muted)">'+timeAgo(p.timestamp)+'</span></div>'
-    + (canDel?'<button onclick="deletePost(\''+p._id+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:6px">🗑️</button>':'')
+    + (canDel?'<button onclick="deletePost(\''+p._id+'\') " style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:6px">\u{1f5d1}\ufe0f</button>':'')
     + '</div>'
     + mediaHtml
     + '<div style="padding:10px 14px 14px">'
     + '<div class="post-actions" style="padding:0;margin-bottom:6px">'
-    + '<button class="action-btn'+(liked?' liked':'')+'" id="like-btn-'+p._id+'" onclick="likePost(\''+p._id+'\',this)"><span class="like-icon">'+(liked?'❤️':'🤍')+'</span> '+lcount+'</button>'
-    + '<button class="action-btn" onclick="toggleComments(\''+p._id+'\')">💬 <span id="ccount-'+p._id+'">0</span></button>'
+    + '<button class="action-btn'+(liked?' liked':'')+'" id="like-btn-'+p._id+'" onclick="likePost(\''+p._id+'\',this)"><span class="like-icon">'+(liked?'\u2764\ufe0f':'\u{1f90d}')+'</span> '+lcount+'</button>'
+    + '<button class="action-btn" onclick="toggleComments(\''+p._id+'\')">\u{1f4ac} <span id="ccount-'+p._id+'">0</span></button>'
     + '</div>'
     + (p.text?'<div class="post-body" style="font-size:.86rem">'+escHTML(p.text)+'</div>':'')
     + '<div class="comments-box" id="cmts-'+p._id+'"><div id="cmts-list-'+p._id+'"></div>'
-    + (ME?'<div class="comment-input-row"><input class="comment-input" id="ci-'+p._id+'" data-pid="'+p._id+'" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment(\''+p._id+'\')">➤</button></div>':'')
+    + (ME?'<div class="comment-input-row"><input class="comment-input" id="ci-'+p._id+'" data-pid="'+p._id+'" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment(\''+p._id+'\')">\u27a4</button></div>':'')
     + '</div></div></div>';
 }
 
 function toggleReelVideo(box){
-  const vid = box.querySelector('video');
-  const icon = box.querySelector('.reel-play-icon');
+  var vid = box.querySelector('video');
+  var icon = box.querySelector('.reel-play-icon');
   if(!vid) return;
   if(vid.paused){ vid.muted=false; vid.play().catch(function(){}); if(icon)icon.style.display='none'; }
   else { vid.pause(); if(icon)icon.style.display='flex'; }
 }
+
+// Reel carousel swipe
+(function(){
+  var _startX=0,_isDrag=false,_carousel=null;
+  document.addEventListener('touchstart',function(e){
+    var t=e.target.closest('.reel-carousel');
+    if(!t)return;_carousel=t;_startX=e.touches[0].clientX;_isDrag=false;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!_carousel)return;
+    var dx=e.touches[0].clientX-_startX;
+    if(Math.abs(dx)>15)_isDrag=true;
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(!_carousel||!_isDrag){_carousel=null;return;}
+    var dx=e.changedTouches[0].clientX-_startX;
+    var idx=parseInt(_carousel.dataset.idx)||0;
+    var total=_carousel.querySelectorAll('.reel-slide').length;
+    if(dx<-40&&idx<total-1)idx++;
+    else if(dx>40&&idx>0)idx--;
+    _carousel.dataset.idx=idx;
+    _carousel.style.transform='translateX(-'+(idx*100)+'%)';
+    var pid=_carousel.id.replace('rc-','');
+    var counter=document.getElementById('rcn-'+pid);
+    if(counter)counter.textContent=(idx+1)+'/'+total;
+    var dotsWrap=document.getElementById('rcd-'+pid);
+    if(dotsWrap){var dots=dotsWrap.querySelectorAll('.reel-dot');for(var d=0;d<dots.length;d++)dots[d].className='reel-dot'+(d===idx?' active':'');}
+    _carousel=null;_isDrag=false;
+  },{passive:true});
+})();
+
 
 function renderExerciseCard(p){
   if(!p||!p._id)return '';
@@ -594,8 +685,19 @@ async function submitExReview(pid){
   try{
     await POST('/api/posts/'+pid+'/review',{rating,review});
     toast('Recensione inviata!');
-    document.getElementById('rate-box-'+pid)?.remove();
-    await loadFeedByType('exercise');
+    // Aggiorna la card in-place senza ricaricare tutto il feed
+    var rateBox = document.getElementById('rate-box-'+pid);
+    if(rateBox){
+      // Crea il blocco stelle + recensione
+      var starsOut = '<div style="margin-top:6px;display:flex;gap:2px">';
+      for(var si=1;si<=5;si++){starsOut+='<span style="color:'+(si<=rating?'#FFD700':'rgba(0,0,0,.15)')+';font-size:.95rem">★</span>';}
+      starsOut+='</div>';
+      if(review) starsOut += '<div style="font-size:.82rem;color:var(--text);margin-top:6px">"'+escHTML(review)+'"</div>';
+      // Inserisci le stelle nel box esercizio e rimuovi il form
+      var exBox = rateBox.previousElementSibling;
+      if(exBox) exBox.insertAdjacentHTML('beforeend', starsOut);
+      rateBox.remove();
+    }
   }catch(e){toast(e.message,'error');}
 }
 

@@ -328,45 +328,255 @@ function renderGuestHome(c){
 /* ============================================================
    SOCIAL FEED
 ============================================================ */
+let _socialTab = 'thread';
 async function renderSocial(){
   const c=document.getElementById('social-content');
   const canLive=ME&&(ME.username?.toLowerCase()==='giada'||ME.role==='superadmin');
   c.innerHTML=`
-    <div class="section-title">📖 Storie</div>
+    <div class="section-title">Storie</div>
     <div class="stories-bar" id="stories-bar"><div class="spinner" style="width:24px;height:24px;margin:auto"></div></div>
 
-    <!-- LIVE strip: shown when Giada is broadcasting -->
     <div id="live-strip" style="display:none;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(255,59,48,.12),rgba(255,107,107,.06));border:1px solid rgba(255,59,48,.2);border-radius:var(--rs);padding:12px 14px;margin-bottom:16px;cursor:pointer"></div>
 
     ${canLive?`<div style="background:linear-gradient(135deg,rgba(255,59,48,.1),rgba(255,107,107,.06));border:1px solid rgba(255,59,48,.25);border-radius:var(--rs);padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
       <div style="flex:1">
-        <div style="font-weight:800;font-size:.9rem;color:#FF3B30;margin-bottom:2px">🔴 Diretta LIVE <span style="background:rgba(255,59,48,.15);color:#FF3B30;padding:2px 8px;border-radius:10px;font-size:.65rem;font-weight:700;margin-left:4px">SPERIMENTALE</span></div>
-        <div style="font-size:.74rem;color:var(--muted)">Vai in diretta per i tuoi studenti — commentano in tempo reale</div>
+        <div style="font-weight:800;font-size:.9rem;color:#FF3B30;margin-bottom:2px">LIVE <span style="background:rgba(255,59,48,.15);color:#FF3B30;padding:2px 8px;border-radius:10px;font-size:.65rem;font-weight:700;margin-left:4px">SPERIMENTALE</span></div>
+        <div style="font-size:.74rem;color:var(--muted)">Vai in diretta per i tuoi studenti</div>
       </div>
-      <button onclick="startLive()" style="background:linear-gradient(135deg,#FF3B30,#FF6B6B);color:#fff;border:none;border-radius:14px;padding:10px 18px;font-family:var(--fb);font-weight:700;font-size:.82rem;cursor:pointer;flex-shrink:0;box-shadow:0 4px 14px rgba(255,59,48,.35)">▶ Inizia</button>
+      <button onclick="startLive()" style="background:linear-gradient(135deg,#FF3B30,#FF6B6B);color:#fff;border:none;border-radius:14px;padding:10px 18px;font-family:var(--fb);font-weight:700;font-size:.82rem;cursor:pointer;flex-shrink:0">Inizia</button>
     </div>`:''}
 
-    <div class="section-title">💬 Community Feed</div>
+    <!-- ── SOCIAL TABS ── -->
+    <div class="social-tabs" id="social-tabs">
+      <button class="social-tab active" data-tab="thread" onclick="switchSocialTab('thread')">Thread</button>
+      <button class="social-tab" data-tab="reel" onclick="switchSocialTab('reel')">Reels</button>
+      <button class="social-tab" data-tab="exercise" onclick="switchSocialTab('exercise')">Esercizi</button>
+    </div>
+
     ${ME?`<div id="suggestions-bar" style="margin-bottom:16px"></div>`:''}
-    ${ME?`<div class="create-post-box">
-      <textarea class="post-textarea" id="new-post-text" rows="2" placeholder="Condividi un traguardo o un consiglio sull'inglese... 🌟"></textarea>
-      <div id="post-media-preview"></div>
-      <div class="upload-btn-row">
-        <label class="upload-btn" for="post-img-input" title="Scegli dalla galleria">📷 Foto</label>
-        <input type="file" id="post-img-input" accept="image/jpeg,image/png,image/gif,image/webp,image/*" style="display:none" onchange="handlePostMedia(this,'image')">
-        <label class="upload-btn" for="post-cam-input" title="Scatta una foto">📸 Scatta</label>
-        <input type="file" id="post-cam-input" accept="image/*" capture="environment" style="display:none" onchange="handlePostMedia(this,'image')">
-        <label class="upload-btn" for="post-vid-input" title="Scegli un video">🎥 Video</label>
-        <input type="file" id="post-vid-input" accept="video/mp4,video/mov,video/avi,video/webm,video/*" style="display:none" onchange="handlePostMedia(this,'video')">
-        <button class="btn-primary btn-sm" onclick="createPost()" style="width:auto;padding:9px 22px;margin-left:auto">Pubblica ✨</button>
-      </div>
-    </div>`:`<div class="guest-bar"><p>🔒 Accedi per partecipare alla community!</p><button onclick="openAuth()">Accedi</button></div>`}
+
+    <!-- ── POST CREATOR (cambia in base al tab) ── -->
+    <div id="social-creator"></div>
+
+    <!-- ── FEED (cambia in base al tab) ── -->
     <div id="feed-list"><div class="spinner"></div></div>
   `;
   loadStories();
-  await loadFeed();
+  renderSocialCreator();
+  await loadFeedByType(_socialTab);
   checkActiveLives();
   if(ME) loadSuggestions();
+}
+
+function switchSocialTab(tab){
+  _socialTab = tab;
+  document.querySelectorAll('.social-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderSocialCreator();
+  loadFeedByType(tab);
+}
+
+function renderSocialCreator(){
+  const box = document.getElementById('social-creator');
+  if(!box) return;
+  if(!ME){
+    box.innerHTML = `<div class="guest-bar"><p>Accedi per partecipare alla community!</p><button onclick="openAuth()">Accedi</button></div>`;
+    return;
+  }
+  if(_socialTab === 'thread'){
+    box.innerHTML = `<div class="create-post-box">
+      <textarea class="post-textarea" id="new-post-text" rows="2" placeholder="Apri una discussione, condividi un consiglio..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn-primary btn-sm" onclick="createThreadPost()" style="width:auto;padding:9px 22px;margin-left:auto">Pubblica</button>
+      </div>
+    </div>`;
+  } else if(_socialTab === 'reel'){
+    box.innerHTML = `<div class="create-post-box">
+      <div style="font-weight:700;font-size:.88rem;margin-bottom:10px;color:var(--dark)">Crea un Reel</div>
+      <textarea class="post-textarea" id="new-reel-caption" rows="1" placeholder="Didascalia (opzionale)..."></textarea>
+      <div id="reel-media-preview"></div>
+      <div class="upload-btn-row">
+        <label class="upload-btn" for="reel-img-input">Foto</label>
+        <input type="file" id="reel-img-input" accept="image/*" style="display:none" onchange="handleReelMedia(this,'image')">
+        <label class="upload-btn" for="reel-vid-input">Video</label>
+        <input type="file" id="reel-vid-input" accept="video/*" style="display:none" onchange="handleReelMedia(this,'video')">
+        <label class="upload-btn" for="reel-cam-input">Scatta</label>
+        <input type="file" id="reel-cam-input" accept="image/*" capture="environment" style="display:none" onchange="handleReelMedia(this,'image')">
+        <button class="btn-primary btn-sm" onclick="createReelPost()" style="width:auto;padding:9px 22px;margin-left:auto">Pubblica Reel</button>
+      </div>
+    </div>`;
+  } else {
+    box.innerHTML = `<div style="background:rgba(156,124,255,.06);border:2px solid rgba(156,124,255,.15);border-radius:var(--rs);padding:14px 16px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:.88rem;color:var(--purple);margin-bottom:4px">Risultati Esercizi</div>
+      <div style="font-size:.78rem;color:var(--muted)">I risultati condivisi dagli utenti al termine degli esercizi. Vota e recensisci!</div>
+    </div>`;
+  }
+}
+
+let pendingReelMedia = null;
+function handleReelMedia(input, type){
+  const file = input.files?.[0];
+  if(!file) return;
+  pendingReelMedia = { file, type };
+  const preview = document.getElementById('reel-media-preview');
+  if(!preview) return;
+  if(type === 'image'){
+    const url = URL.createObjectURL(file);
+    preview.innerHTML = `<div class="media-preview-wrap"><img src="${url}" style="max-height:200px;border-radius:12px"><button class="media-remove-btn" onclick="removeReelMedia()">x</button></div>`;
+  } else {
+    preview.innerHTML = `<div class="media-preview-wrap" style="background:rgba(0,0,0,.04);border-radius:12px;padding:12px;display:flex;align-items:center;gap:8px"><span style="font-size:1.5rem">🎬</span><span style="font-weight:700;font-size:.85rem">${file.name}</span><button class="media-remove-btn" onclick="removeReelMedia()">x</button></div>`;
+  }
+}
+function removeReelMedia(){ pendingReelMedia=null; const p=document.getElementById('reel-media-preview'); if(p)p.innerHTML=''; }
+
+async function createThreadPost(){
+  if(!ME){openAuth();return;}
+  const text=document.getElementById('new-post-text')?.value?.trim();
+  if(!text){toast('Scrivi qualcosa per aprire un thread!','error');return;}
+  try{
+    await POST('/api/posts',{text, postType:'thread'});
+    document.getElementById('new-post-text').value='';
+    toast('Thread pubblicato!');
+    await loadFeedByType('thread');
+  }catch(e){toast(e.message,'error');}
+}
+
+async function createReelPost(){
+  if(!ME){openAuth();return;}
+  if(!pendingReelMedia){toast('Aggiungi una foto o un video per creare un Reel!','error');return;}
+  try{
+    let mediaUrl=null, mediaType=null;
+    const fd=new FormData();
+    const tok=localStorage.getItem('gc_token');
+    if(pendingReelMedia.blob) fd.append('file', pendingReelMedia.blob, 'reel.jpg');
+    else fd.append('file', pendingReelMedia.file);
+    toast('Caricamento reel...','info',5000);
+    const r=await fetch('/api/media/upload',{method:'POST',headers:{'Authorization':'Bearer '+tok},body:fd});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Upload fallito');
+    mediaUrl=d.url; mediaType=d.type;
+    const caption=document.getElementById('new-reel-caption')?.value?.trim()||'';
+    await POST('/api/posts',{text:caption, mediaUrl, mediaType, postType:'reel'});
+    removeReelMedia();
+    if(document.getElementById('new-reel-caption')) document.getElementById('new-reel-caption').value='';
+    toast('Reel pubblicato!');
+    await loadFeedByType('reel');
+  }catch(e){toast(e.message,'error');}
+}
+
+async function loadFeedByType(type){
+  const fl=document.getElementById('feed-list');
+  if(!fl)return;
+  fl.innerHTML='<div class="spinner"></div>';
+  try{
+    const _pr=await fetch('/api/posts?type='+(type||''),{headers:{...(localStorage.getItem('gc_token')?{'Authorization':'Bearer '+localStorage.getItem('gc_token')}:{})},cache:'no-store'});
+    const posts=_pr.ok?await _pr.json():[];
+    if(!Array.isArray(posts)||!posts.length){
+      const emptyMsg = type==='thread' ? 'Nessun thread ancora. Inizia una discussione!' : type==='reel' ? 'Nessun reel ancora. Condividi una foto o un video!' : 'Nessun risultato condiviso ancora.';
+      fl.innerHTML=`<div class="empty-state"><div class="ei">${type==='reel'?'🎬':type==='exercise'?'📝':'💬'}</div><h3>${emptyMsg}</h3></div>`;
+      return;
+    }
+    if(type === 'reel'){
+      fl.innerHTML = posts.map(p => renderReelCard(p)).join('');
+    } else if(type === 'exercise'){
+      fl.innerHTML = posts.map(p => renderExerciseCard(p)).join('');
+    } else {
+      fl.innerHTML = posts.map(p => renderPostHTML(p)).join('');
+    }
+    posts.forEach(p=>loadPostComments(p._id));
+  }catch(e){
+    fl.innerHTML=`<div class="empty-state"><div class="ei">⚠️</div><h3>Errore</h3><p>${escHTML(e.message)}</p><button onclick="loadFeedByType('${type}')" class="btn-primary btn-sm" style="width:auto;margin-top:8px">Riprova</button></div>`;
+  }
+}
+
+function renderReelCard(p){
+  if(!p||!p._id)return '';
+  const a=p.author||{username:'Utente',avatar:'👤',_id:'',avatarUrl:''};
+  const liked=ME&&(p.likes||[]).includes(ME._id);
+  const lcount=(p.likes||[]).length;
+  const canDel=ME&&(ME._id===p.userId||['admin','superadmin'].includes(ME.role));
+  const mediaHtml = p.mediaType==='video'
+    ?`<video src="${p.mediaUrl}" controls playsinline preload="none" style="width:100%;max-height:500px;display:block;background:#000;border-radius:14px"></video>`
+    :`<img src="${p.mediaUrl}" alt="" onclick="openLightbox('${p.mediaUrl}')" loading="lazy" style="width:100%;border-radius:14px;cursor:pointer" onerror="this.style.display='none'">`;
+  return `<div class="feed-post reel-card" id="post-${p._id}" style="border-radius:18px;overflow:hidden;padding:0;margin-bottom:16px">
+    <div style="position:relative">
+      ${(p.mediaUrl&&p.mediaUrl.startsWith('/'))?mediaHtml:'<div style="height:200px;background:linear-gradient(135deg,var(--coral),var(--orange));border-radius:14px"></div>'}
+    </div>
+    <div style="padding:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div class="avatar-circle" style="width:36px;height:36px;background:${pickColor(a.username)};cursor:pointer;font-size:.9rem;overflow:hidden;flex-shrink:0" onclick="viewUser('${a._id}')">${a.avatarUrl?`<img src="${a.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:a.avatar||initials(a.username)}</div>
+        <div style="flex:1;min-width:0"><strong style="font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${escHTML(a.username)}</strong><span style="font-size:.7rem;color:var(--muted)">${timeAgo(p.timestamp)}</span></div>
+        ${canDel?`<button onclick="deletePost('${p._id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:4px">x</button>`:''}
+      </div>
+      ${p.text?`<div class="post-body" style="font-size:.88rem;margin-bottom:8px">${escHTML(p.text)}</div>`:''}
+      <div class="post-actions" style="padding:0">
+        <button class="action-btn${liked?' liked':''}" id="like-btn-${p._id}" onclick="likePost('${p._id}',this)"><span class="like-icon">${liked?'❤️':'🤍'}</span> ${lcount}</button>
+        <button class="action-btn" onclick="toggleComments('${p._id}')">💬 <span id="ccount-${p._id}">0</span></button>
+      </div>
+      <div class="comments-box" id="cmts-${p._id}">
+        <div id="cmts-list-${p._id}"></div>
+        ${ME?`<div class="comment-input-row"><input class="comment-input" id="ci-${p._id}" data-pid="${p._id}" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment('${p._id}')">➤</button></div>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderExerciseCard(p){
+  if(!p||!p._id)return '';
+  const a=p.author||{username:'Utente',avatar:'👤',_id:'',avatarUrl:''};
+  const score=p.score||0;
+  const scoreColor=score>=80?'#4ADE80':score>=50?'#FF9F43':'#FF6B6B';
+  const stars=p.rating||0;
+  const starsHtml=stars?'<div style="margin-top:6px;display:flex;gap:2px">'+[1,2,3,4,5].map(function(i){return '<span style="color:'+(i<=stars?'#FFD700':'rgba(0,0,0,.15)')+';font-size:.95rem">★</span>';}).join('')+'</div>':'';
+  const canRate=ME&&ME._id===p.userId&&!p.rating;
+  return `<div class="feed-post exercise-card" id="post-${p._id}" style="border:2px solid rgba(156,124,255,.12)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div class="avatar-circle" style="width:38px;height:38px;background:${pickColor(a.username)};cursor:pointer;font-size:.9rem;overflow:hidden;flex-shrink:0" onclick="viewUser('${a._id}')">${a.avatarUrl?`<img src="${a.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:a.avatar||initials(a.username)}</div>
+      <div style="flex:1;min-width:0"><strong style="font-size:.85rem;display:block">${escHTML(a.username)}</strong><span style="font-size:.7rem;color:var(--muted)">${timeAgo(p.timestamp)}</span></div>
+      <div style="text-align:right">
+        <div style="font-family:var(--fh);font-size:1.6rem;font-weight:800;color:${scoreColor}">${score}%</div>
+      </div>
+    </div>
+    <div style="background:rgba(156,124,255,.06);border-radius:12px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-weight:700;font-size:.88rem;color:var(--purple)">${escHTML(p.exerciseTitle||'Esercizio')}</div>
+      ${p.exerciseLevel?`<div style="font-size:.72rem;color:var(--muted);margin-top:2px">${p.exerciseLevel}</div>`:''}
+      ${starsHtml}
+      ${p.review?`<div style="font-size:.82rem;color:var(--text);margin-top:6px;font-style:normal">"${escHTML(p.review)}"</div>`:''}
+    </div>
+    ${canRate?`<div id="rate-box-${p._id}" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-size:.78rem;font-weight:700;color:var(--muted)">Valuta:</span>
+      <div class="star-picker" id="star-pick-${p._id}">${[1,2,3,4,5].map(function(i){return '<span class="star-pick-btn" data-val="'+i+'" onclick="pickExStar(\''+p._id+'\','+i+')" style="cursor:pointer;font-size:1.2rem;color:rgba(0,0,0,.15);transition:color .15s">★</span>';}).join('')}</div>
+      <input type="text" id="rev-text-${p._id}" placeholder="Breve recensione..." style="flex:1;border:1.5px solid rgba(0,0,0,.08);border-radius:10px;padding:6px 10px;font-family:var(--fb);font-size:.78rem;outline:none;background:var(--card-bg);color:var(--text)">
+      <button onclick="submitExReview('${p._id}')" style="background:var(--coral);color:#fff;border:none;border-radius:10px;padding:6px 14px;font-weight:700;font-size:.78rem;cursor:pointer">Invia</button>
+    </div>`:''}
+    ${p.text&&!p.exerciseId?`<div class="post-body" style="font-size:.85rem">${escHTML(p.text)}</div>`:''}
+    <div class="post-actions" style="padding-top:4px">
+      <button class="action-btn${ME&&(p.likes||[]).includes(ME._id)?' liked':''}" id="like-btn-${p._id}" onclick="likePost('${p._id}',this)"><span class="like-icon">${ME&&(p.likes||[]).includes(ME._id)?'❤️':'🤍'}</span> ${(p.likes||[]).length}</button>
+      <button class="action-btn" onclick="toggleComments('${p._id}')">💬 <span id="ccount-${p._id}">0</span></button>
+    </div>
+    <div class="comments-box" id="cmts-${p._id}"><div id="cmts-list-${p._id}"></div>
+    ${ME?`<div class="comment-input-row"><input class="comment-input" id="ci-${p._id}" data-pid="${p._id}" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment('${p._id}')">➤</button></div>`:''}</div>
+  </div>`;
+}
+
+let _pickedExStars = {};
+function pickExStar(pid, val){
+  _pickedExStars[pid] = val;
+  const picker = document.getElementById('star-pick-'+pid);
+  if(!picker) return;
+  picker.querySelectorAll('.star-pick-btn').forEach(s => {
+    s.style.color = parseInt(s.dataset.val) <= val ? '#FFD700' : 'rgba(0,0,0,.15)';
+  });
+}
+async function submitExReview(pid){
+  const rating = _pickedExStars[pid];
+  if(!rating){toast('Seleziona le stelle!','error');return;}
+  const review = document.getElementById('rev-text-'+pid)?.value?.trim()||'';
+  try{
+    await POST('/api/posts/'+pid+'/review',{rating,review});
+    toast('Recensione inviata!');
+    document.getElementById('rate-box-'+pid)?.remove();
+    await loadFeedByType('exercise');
+  }catch(e){toast(e.message,'error');}
 }
 
 async function loadSuggestions(){
@@ -420,35 +630,7 @@ async function showFollowList(userId,type){
   }catch(e){toast(e.message,'error');}
 }
 
-async function loadFeed(){
-  const fl=document.getElementById('feed-list');
-  if(!fl)return;
-  try{
-    const _pr=await fetch('/api/posts',{headers:{...(localStorage.getItem('gc_token')?{'Authorization':'Bearer '+localStorage.getItem('gc_token')}:{})},cache:'no-store'});
-    const posts=_pr.ok?await _pr.json():[];
-    if(!Array.isArray(posts)||!posts.length){
-      fl.innerHTML=`<div class="empty-state"><div class="ei">💬</div><h3>Il feed è vuoto</h3><p>Completa un esercizio e condividi il risultato per primo!</p></div>`;
-      return;
-    }
-    try {
-      fl.innerHTML=posts.map(p=>renderPostHTML(p)).join('');
-    } catch(innerErr) {
-      // Fallback: render posts one by one, skip broken ones
-      fl.innerHTML = '';
-      posts.forEach(p => {
-        try {
-          const d=document.createElement('div');
-          d.innerHTML=renderPostHTML(p);
-          if(d.firstElementChild) fl.appendChild(d.firstElementChild);
-        } catch {}
-      });
-    }
-    posts.forEach(p=>loadPostComments(p._id));
-  }catch(e){
-    console.warn('[loadFeed]',e.message);
-    if(fl)fl.innerHTML=`<div class="empty-state"><div class="ei">⚠️</div><h3>Errore caricamento</h3><p>${escHTML(e.message)}</p><button onclick="loadFeed()" style="margin-top:12px;background:linear-gradient(135deg,var(--coral),var(--orange));color:#fff;border:none;border-radius:12px;padding:9px 20px;cursor:pointer;font-weight:700">🔄 Riprova</button></div>`;
-  }
-}
+async function loadFeed(){ return loadFeedByType(_socialTab); }
 
 function renderPostHTML(p,compact=false){
   if(!p||!p._id)return '';
@@ -5143,68 +5325,108 @@ setInterval(()=>{
 //  v10 NEW FEATURES
 // ============================================================
 
-// ── Desktop Blocker — Anti-bypass avanzato ──
+// ── Desktop Blocker — Anti-bypass HARDCORE v2 ──
 (function(){
   const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (isPWA) return; // PWA sempre permessa
 
   function isRealMobile() {
-    // 1. Check touch support reale (non simulato)
     const hasTouch = 'ontouchstart' in window && navigator.maxTouchPoints > 0;
-    // 2. User agent check (mobile reale)
     const ua = navigator.userAgent || '';
     const mobileUA = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(ua);
-    // 3. Platform check
     const mobilePlatform = /Android|iPhone|iPad|iPod/.test(navigator.platform || '');
-    // 4. Check se DevTools emulazione (Chrome mobile emulation manda un UA mobile ma ha schermo grande)
     const screenReal = window.screen.width <= 1024 && window.screen.height <= 1400;
-    // 5. Check orientation API (solo mobile reale)
-    const hasOrientation = typeof window.orientation !== 'undefined' || (screen.orientation && screen.orientation.type);
-    // 6. Controlla se il devicePixelRatio e' tipico di mobile
-    const mobileDPR = window.devicePixelRatio >= 1.5;
-    
-    // Desktop con emulazione mobile: ha UA mobile ma screen.width reale > 1024
-    // Il trucco: screen.width e screen.height NON cambiano con DevTools emulation
     const suspectedEmulation = mobileUA && !screenReal && !mobilePlatform;
-    
     if (suspectedEmulation) return false;
     return (hasTouch && mobileUA) || mobilePlatform;
   }
 
-  function showBlocker() {
-    const b = document.getElementById('desktop-blocker');
-    if (b) b.style.display = 'flex';
-    // Blocca interazione sotto
-    document.body.style.overflow = 'hidden';
+  const _isDesktop = !isRealMobile();
+
+  // ── Se desktop: inietta blocker diretto e blocca TUTTO ──
+  function nukeContent() {
+    // Rimuovi tutto il body tranne il blocker
+    document.querySelectorAll('body > *').forEach(el => {
+      if (el.id !== 'desktop-blocker') el.remove();
+    });
   }
 
-  function checkDesktop() {
-    if (!isRealMobile() && !isPWA) {
-      showBlocker();
+  function createBlocker() {
+    let b = document.getElementById('desktop-blocker');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'desktop-blocker';
+      document.body.insertBefore(b, document.body.firstChild);
     }
+    b.style.cssText = 'position:fixed;inset:0;z-index:999999;background:linear-gradient(135deg,#0a0a1a 0%,#1a1a3a 50%,#0a0a1a 100%);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;padding:40px;';
+    b.innerHTML = '<div style="max-width:420px"><div style="font-size:4rem;margin-bottom:20px">📱</div><div style="font-family:Poppins,sans-serif;font-size:2rem;margin-bottom:12px">GiadaCourses</div><div style="font-size:1rem;opacity:.7;line-height:1.6;margin-bottom:24px">Questa app e progettata per dispositivi mobili.<br>Per la migliore esperienza, apri GiadaCourses dal tuo smartphone.</div><div style="display:inline-block;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);padding:8px 20px;border-radius:12px;font-weight:700;font-size:.85rem">Modalita Desktop in costruzione</div></div>';
+    document.body.style.overflow = 'hidden';
+    return b;
   }
 
-  // Check iniziale
-  checkDesktop();
-  // Ricontrolla su resize (per chi apre DevTools dopo)
-  window.addEventListener('resize', checkDesktop);
+  if (_isDesktop) {
+    createBlocker();
+    nukeContent();
 
-  // ── Anti-DevTools (previeni ispezione) ──
-  // Blocca tasto destro fuori dalle aree chat
+    // ── LIVELLO 1: MutationObserver — se il blocker viene rimosso/nascosto, ricrealo e nuka ──
+    const _blockerGuard = new MutationObserver(() => {
+      const b = document.getElementById('desktop-blocker');
+      if (!b || b.style.display === 'none' || b.style.visibility === 'hidden' || b.style.opacity === '0' || getComputedStyle(b).display === 'none') {
+        createBlocker();
+        nukeContent();
+      }
+    });
+    _blockerGuard.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+
+    // ── LIVELLO 2: Polling continuo ogni 500ms ──
+    setInterval(() => {
+      const b = document.getElementById('desktop-blocker');
+      if (!b || getComputedStyle(b).display === 'none' || getComputedStyle(b).visibility === 'hidden') {
+        createBlocker();
+        nukeContent();
+      }
+      // Assicurati che il body non sia scrollabile
+      document.body.style.overflow = 'hidden';
+    }, 500);
+
+    // ── LIVELLO 3: Rileva DevTools via dimensione finestra ──
+    let _devtoolsOpen = false;
+    function checkDevTools() {
+      const widthThreshold = window.outerWidth - window.innerWidth > 160;
+      const heightThreshold = window.outerHeight - window.innerHeight > 300;
+      if (widthThreshold || heightThreshold) {
+        if (!_devtoolsOpen) {
+          _devtoolsOpen = true;
+          createBlocker();
+          nukeContent();
+        }
+      }
+    }
+    setInterval(checkDevTools, 1000);
+    window.addEventListener('resize', checkDevTools);
+
+    // ── LIVELLO 4: Override console per rendere inutile l'ispezione ──
+    try {
+      Object.defineProperty(window, '__debug_check', {
+        get: function() { createBlocker(); nukeContent(); }
+      });
+    } catch(e) {}
+  }
+
+  // ── Blocca tasto destro fuori dalle aree chat (anche su mobile) ──
   document.addEventListener('contextmenu', function(e) {
     const target = e.target;
     const inChat = target.closest('.dm-sheet, .comment-input, [contenteditable], textarea, input[type="text"]');
     if (!inChat) e.preventDefault();
   });
 
-  // Blocca shortcut DevTools
+  // ── Blocca shortcut DevTools ──
   document.addEventListener('keydown', function(e) {
-    // F12
     if (e.key === 'F12') { e.preventDefault(); return false; }
-    // Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
     if (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase())) { e.preventDefault(); return false; }
-    // Ctrl+U (view source)
     if (e.ctrlKey && e.key.toUpperCase() === 'U') { e.preventDefault(); return false; }
+    // Ctrl+S (salva pagina)
+    if (e.ctrlKey && e.key.toUpperCase() === 'S') { e.preventDefault(); return false; }
   });
 
   // ── Anti copia/incolla fuori dalle chat ──

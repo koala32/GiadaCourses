@@ -178,7 +178,12 @@ module.exports = function(app) {
   // ── POSTS ──
   app.get('/api/posts', async (req, res) => {
     try {
-      const posts = (await db.posts.findAsync({})).sort((a,b) => b.timestamp - a.timestamp);
+      const { type } = req.query; // thread | reel | exercise
+      let posts = (await db.posts.findAsync({})).sort((a,b) => b.timestamp - a.timestamp);
+      // Filtra per tipo se richiesto
+      if (type === 'thread') posts = posts.filter(p => !p.mediaUrl && !p.exerciseId);
+      else if (type === 'reel') posts = posts.filter(p => p.mediaUrl && !p.exerciseId);
+      else if (type === 'exercise') posts = posts.filter(p => !!p.exerciseId);
       const uids = [...new Set(posts.map(p => p.userId).filter(Boolean))];
       const users = await db.users.findAsync({ _id: { $in: uids } });
       const uMap = {};
@@ -188,18 +193,29 @@ module.exports = function(app) {
   });
 
   app.post('/api/posts', requireAuth, async (req, res) => {
-    const { text, exerciseId, score, visibility, mediaUrl, mediaType, mediaUrls } = req.body;
+    const { text, exerciseId, score, exerciseTitle, exerciseLevel, visibility, mediaUrl, mediaType, mediaUrls, postType, review, rating } = req.body;
     if (!text?.trim() && !mediaUrl && !mediaUrls?.length) return res.status(400).json({ error: 'Testo o media richiesto' });
     const post = await db.posts.insertAsync({
       userId: req.user._id, text: (text||'').trim(), exerciseId: exerciseId||null, score: score||null,
+      exerciseTitle: exerciseTitle||null, exerciseLevel: exerciseLevel||null,
       timestamp: Date.now(), visibility: visibility||'public', likes: [],
       mediaUrl: mediaUrl||null, mediaType: mediaType||null, mediaUrls: mediaUrls||null,
+      postType: postType || (exerciseId ? 'exercise' : mediaUrl ? 'reel' : 'thread'),
+      review: review||null, rating: rating||null,
     });
     const { passwordHash, ...auth } = req.user;
     const result = { ...post, author: { _id: auth._id, username: auth.username, avatar: auth.avatar||'', avatarUrl: auth.avatarUrl||'', role: auth.role, verified: auth.verified } };
     sseBroadcast('new_post', result);
     notifyBellUsers(req.user._id, 'bell_post', { userId: req.user._id, username: req.user.username, postId: post._id, text: (post.text||'').slice(0,50) }).catch(() => {});
     res.json(result);
+  });
+
+  // ── Recensione esercizio (stelle + breve commento) ──
+  app.post('/api/posts/:id/review', requireAuth, async (req, res) => {
+    const { rating, review } = req.body;
+    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'Valutazione 1-5 richiesta' });
+    await db.posts.updateAsync({ _id: req.params.id }, { $set: { rating: parseInt(rating), review: (review||'').trim().slice(0, 200) } });
+    res.json({ ok: true });
   });
 
   app.delete('/api/posts/:id', requireAuth, async (req, res) => {

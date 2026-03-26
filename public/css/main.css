@@ -118,6 +118,20 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 /* ── FLOATING PWA PILL — handled by #pwa-pill in new system ── */
 /* ── CARDS / BUTTONS ── */
 .card{background:var(--card-bg);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);margin-bottom:16px;}
+/* ── Social Tabs ── */
+.social-tabs{display:flex;gap:4px;margin-bottom:16px;background:rgba(0,0,0,.04);border-radius:14px;padding:4px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.social-tabs::-webkit-scrollbar{display:none;}
+.social-tab{flex:1;border:none;background:none;border-radius:10px;padding:10px 16px;font-family:var(--fb);font-weight:700;font-size:.85rem;cursor:pointer;color:var(--muted);transition:all .2s;white-space:nowrap;min-width:80px;text-align:center;}
+.social-tab.active{background:var(--card-bg);color:var(--coral);box-shadow:0 2px 8px rgba(0,0,0,.08);}
+[data-theme="dark"] .social-tabs{background:rgba(255,255,255,.04);}
+[data-theme="dark"] .social-tab.active{background:rgba(255,255,255,.08);color:var(--coral);}
+/* ── Reel Card ── */
+.reel-card{background:var(--card-bg);box-shadow:var(--shadow);}
+.reel-card .media-in-post{margin:0;border-radius:14px;}
+[data-theme="dark"] .reel-card{background:#161630;}
+/* ── Exercise Card ── */
+.exercise-card{background:var(--card-bg);box-shadow:var(--shadow);}
+[data-theme="dark"] .exercise-card{background:#161630;border-color:rgba(156,124,255,.08)!important;}
 .btn-primary{background:linear-gradient(135deg,var(--coral),var(--orange));color:#fff;border:none;border-radius:var(--rs);padding:12px 24px;font-family:var(--fb);font-weight:800;font-size:.95rem;cursor:pointer;transition:all .2s;width:100%;display:block;text-align:center;}
 .btn-primary:hover{transform:translateY(-2px);box-shadow:var(--shadow);}
 .btn-secondary{background:rgba(0,0,0,.06);color:var(--text);border:none;border-radius:var(--rs);padding:12px 24px;font-family:var(--fb);font-weight:700;font-size:.95rem;cursor:pointer;transition:all .2s;width:100%;display:block;text-align:center;}

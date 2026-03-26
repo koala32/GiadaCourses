@@ -328,10 +328,11 @@ function renderGuestHome(c){
 /* ============================================================
    SOCIAL FEED
 ============================================================ */
-let _socialTab = 'thread';
+let _socialTab = sessionStorage.getItem('gc_social_tab') || 'thread';
 async function renderSocial(){
   const c=document.getElementById('social-content');
   const canLive=ME&&(ME.username?.toLowerCase()==='giada'||ME.role==='superadmin');
+  const tab = _socialTab;
   c.innerHTML=`
     <div class="section-title">Storie</div>
     <div class="stories-bar" id="stories-bar"><div class="spinner" style="width:24px;height:24px;margin:auto"></div></div>
@@ -348,9 +349,9 @@ async function renderSocial(){
 
     <!-- ── SOCIAL TABS ── -->
     <div class="social-tabs" id="social-tabs">
-      <button class="social-tab active" data-tab="thread" onclick="switchSocialTab('thread')">Thread</button>
-      <button class="social-tab" data-tab="reel" onclick="switchSocialTab('reel')">Reels</button>
-      <button class="social-tab" data-tab="exercise" onclick="switchSocialTab('exercise')">Esercizi</button>
+      <button class="social-tab${tab==='thread'?' active':''}" data-tab="thread" onclick="switchSocialTab('thread')">Thread</button>
+      <button class="social-tab${tab==='reel'?' active':''}" data-tab="reel" onclick="switchSocialTab('reel')">Reels</button>
+      <button class="social-tab${tab==='exercise'?' active':''}" data-tab="exercise" onclick="switchSocialTab('exercise')">Esercizi</button>
     </div>
 
     ${ME?`<div id="suggestions-bar" style="margin-bottom:16px"></div>`:''}
@@ -363,13 +364,14 @@ async function renderSocial(){
   `;
   loadStories();
   renderSocialCreator();
-  await loadFeedByType(_socialTab);
+  await loadFeedByType(tab);
   checkActiveLives();
   if(ME) loadSuggestions();
 }
 
 function switchSocialTab(tab){
   _socialTab = tab;
+  sessionStorage.setItem('gc_social_tab', tab);
   document.querySelectorAll('.social-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   renderSocialCreator();
   loadFeedByType(tab);
@@ -419,11 +421,11 @@ function handleReelMedia(input, type){
   pendingReelMedia = { file, type };
   const preview = document.getElementById('reel-media-preview');
   if(!preview) return;
+  const url = URL.createObjectURL(file);
   if(type === 'image'){
-    const url = URL.createObjectURL(file);
-    preview.innerHTML = `<div class="media-preview-wrap"><img src="${url}" style="max-height:200px;border-radius:12px"><button class="media-remove-btn" onclick="removeReelMedia()">x</button></div>`;
+    preview.innerHTML = '<div style="position:relative;margin-top:10px"><img src="'+url+'" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;display:block"><button class="media-remove-btn" onclick="removeReelMedia()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center">x</button></div>';
   } else {
-    preview.innerHTML = `<div class="media-preview-wrap" style="background:rgba(0,0,0,.04);border-radius:12px;padding:12px;display:flex;align-items:center;gap:8px"><span style="font-size:1.5rem">🎬</span><span style="font-weight:700;font-size:.85rem">${file.name}</span><button class="media-remove-btn" onclick="removeReelMedia()">x</button></div>`;
+    preview.innerHTML = '<div style="position:relative;margin-top:10px"><video src="'+url+'" style="width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:12px;display:block" playsinline muted></video><button class="media-remove-btn" onclick="removeReelMedia()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center">x</button><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.5rem;color:rgba(255,255,255,.8);pointer-events:none;border-radius:12px;background:rgba(0,0,0,.2)">&#9654;</div></div>';
   }
 }
 function removeReelMedia(){ pendingReelMedia=null; const p=document.getElementById('reel-media-preview'); if(p)p.innerHTML=''; }
@@ -494,30 +496,38 @@ function renderReelCard(p){
   const liked=ME&&(p.likes||[]).includes(ME._id);
   const lcount=(p.likes||[]).length;
   const canDel=ME&&(ME._id===p.userId||['admin','superadmin'].includes(ME.role));
-  const mediaHtml = p.mediaType==='video'
-    ?`<video src="${p.mediaUrl}" controls playsinline preload="none" style="width:100%;max-height:500px;display:block;background:#000;border-radius:14px"></video>`
-    :`<img src="${p.mediaUrl}" alt="" onclick="openLightbox('${p.mediaUrl}')" loading="lazy" style="width:100%;border-radius:14px;cursor:pointer" onerror="this.style.display='none'">`;
-  return `<div class="feed-post reel-card" id="post-${p._id}" style="border-radius:18px;overflow:hidden;padding:0;margin-bottom:16px">
-    <div style="position:relative">
-      ${(p.mediaUrl&&p.mediaUrl.startsWith('/'))?mediaHtml:'<div style="height:200px;background:linear-gradient(135deg,var(--coral),var(--orange));border-radius:14px"></div>'}
-    </div>
-    <div style="padding:14px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <div class="avatar-circle" style="width:36px;height:36px;background:${pickColor(a.username)};cursor:pointer;font-size:.9rem;overflow:hidden;flex-shrink:0" onclick="viewUser('${a._id}')">${a.avatarUrl?`<img src="${a.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:a.avatar||initials(a.username)}</div>
-        <div style="flex:1;min-width:0"><strong style="font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${escHTML(a.username)}</strong><span style="font-size:.7rem;color:var(--muted)">${timeAgo(p.timestamp)}</span></div>
-        ${canDel?`<button onclick="deletePost('${p._id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:4px">x</button>`:''}
-      </div>
-      ${p.text?`<div class="post-body" style="font-size:.88rem;margin-bottom:8px">${escHTML(p.text)}</div>`:''}
-      <div class="post-actions" style="padding:0">
-        <button class="action-btn${liked?' liked':''}" id="like-btn-${p._id}" onclick="likePost('${p._id}',this)"><span class="like-icon">${liked?'❤️':'🤍'}</span> ${lcount}</button>
-        <button class="action-btn" onclick="toggleComments('${p._id}')">💬 <span id="ccount-${p._id}">0</span></button>
-      </div>
-      <div class="comments-box" id="cmts-${p._id}">
-        <div id="cmts-list-${p._id}"></div>
-        ${ME?`<div class="comment-input-row"><input class="comment-input" id="ci-${p._id}" data-pid="${p._id}" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment('${p._id}')">➤</button></div>`:''}
-      </div>
-    </div>
-  </div>`;
+  let mediaHtml = '';
+  if(p.mediaUrl && p.mediaUrl.startsWith('/')){
+    if(p.mediaType==='video'){
+      mediaHtml = '<div class="reel-media-box" onclick="toggleReelVideo(this)"><video src="'+p.mediaUrl+'" playsinline preload="metadata" muted loop style="width:100%;height:100%;object-fit:cover"></video><div class="reel-play-icon">&#9654;</div></div>';
+    } else {
+      mediaHtml = '<div class="reel-media-box" onclick="openLightbox(\''+p.mediaUrl+'\')"><img src="'+p.mediaUrl+'" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\'none\'"></div>';
+    }
+  }
+  return '<div class="feed-post reel-card" id="post-'+p._id+'">'
+    + '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px 8px">'
+    + '<div class="avatar-circle" style="width:34px;height:34px;background:'+pickColor(a.username)+';cursor:pointer;font-size:.85rem;overflow:hidden;flex-shrink:0" onclick="viewUser(\''+a._id+'\')">'+(a.avatarUrl?'<img src="'+a.avatarUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':a.avatar||initials(a.username))+'</div>'
+    + '<div style="flex:1;min-width:0"><strong style="font-size:.85rem;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHTML(a.username)+'</strong><span style="font-size:.68rem;color:var(--muted)">'+timeAgo(p.timestamp)+'</span></div>'
+    + (canDel?'<button onclick="deletePost(\''+p._id+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:6px">🗑️</button>':'')
+    + '</div>'
+    + mediaHtml
+    + '<div style="padding:10px 14px 14px">'
+    + '<div class="post-actions" style="padding:0;margin-bottom:6px">'
+    + '<button class="action-btn'+(liked?' liked':'')+'" id="like-btn-'+p._id+'" onclick="likePost(\''+p._id+'\',this)"><span class="like-icon">'+(liked?'❤️':'🤍')+'</span> '+lcount+'</button>'
+    + '<button class="action-btn" onclick="toggleComments(\''+p._id+'\')">💬 <span id="ccount-'+p._id+'">0</span></button>'
+    + '</div>'
+    + (p.text?'<div class="post-body" style="font-size:.86rem">'+escHTML(p.text)+'</div>':'')
+    + '<div class="comments-box" id="cmts-'+p._id+'"><div id="cmts-list-'+p._id+'"></div>'
+    + (ME?'<div class="comment-input-row"><input class="comment-input" id="ci-'+p._id+'" data-pid="'+p._id+'" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment(\''+p._id+'\')">➤</button></div>':'')
+    + '</div></div></div>';
+}
+
+function toggleReelVideo(box){
+  const vid = box.querySelector('video');
+  const icon = box.querySelector('.reel-play-icon');
+  if(!vid) return;
+  if(vid.paused){ vid.muted=false; vid.play().catch(function(){}); if(icon)icon.style.display='none'; }
+  else { vid.pause(); if(icon)icon.style.display='flex'; }
 }
 
 function renderExerciseCard(p){
@@ -526,36 +536,46 @@ function renderExerciseCard(p){
   const score=p.score||0;
   const scoreColor=score>=80?'#4ADE80':score>=50?'#FF9F43':'#FF6B6B';
   const stars=p.rating||0;
-  const starsHtml=stars?'<div style="margin-top:6px;display:flex;gap:2px">'+[1,2,3,4,5].map(function(i){return '<span style="color:'+(i<=stars?'#FFD700':'rgba(0,0,0,.15)')+';font-size:.95rem">★</span>';}).join('')+'</div>':'';
-  const canRate=ME&&ME._id===p.userId&&!p.rating;
-  return `<div class="feed-post exercise-card" id="post-${p._id}" style="border:2px solid rgba(156,124,255,.12)">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <div class="avatar-circle" style="width:38px;height:38px;background:${pickColor(a.username)};cursor:pointer;font-size:.9rem;overflow:hidden;flex-shrink:0" onclick="viewUser('${a._id}')">${a.avatarUrl?`<img src="${a.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:a.avatar||initials(a.username)}</div>
-      <div style="flex:1;min-width:0"><strong style="font-size:.85rem;display:block">${escHTML(a.username)}</strong><span style="font-size:.7rem;color:var(--muted)">${timeAgo(p.timestamp)}</span></div>
-      <div style="text-align:right">
-        <div style="font-family:var(--fh);font-size:1.6rem;font-weight:800;color:${scoreColor}">${score}%</div>
-      </div>
-    </div>
-    <div style="background:rgba(156,124,255,.06);border-radius:12px;padding:12px 14px;margin-bottom:8px">
-      <div style="font-weight:700;font-size:.88rem;color:var(--purple)">${escHTML(p.exerciseTitle||'Esercizio')}</div>
-      ${p.exerciseLevel?`<div style="font-size:.72rem;color:var(--muted);margin-top:2px">${p.exerciseLevel}</div>`:''}
-      ${starsHtml}
-      ${p.review?`<div style="font-size:.82rem;color:var(--text);margin-top:6px;font-style:normal">"${escHTML(p.review)}"</div>`:''}
-    </div>
-    ${canRate?`<div id="rate-box-${p._id}" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <span style="font-size:.78rem;font-weight:700;color:var(--muted)">Valuta:</span>
-      <div class="star-picker" id="star-pick-${p._id}">${[1,2,3,4,5].map(function(i){return '<span class="star-pick-btn" data-val="'+i+'" onclick="pickExStar(\''+p._id+'\','+i+')" style="cursor:pointer;font-size:1.2rem;color:rgba(0,0,0,.15);transition:color .15s">★</span>';}).join('')}</div>
-      <input type="text" id="rev-text-${p._id}" placeholder="Breve recensione..." style="flex:1;border:1.5px solid rgba(0,0,0,.08);border-radius:10px;padding:6px 10px;font-family:var(--fb);font-size:.78rem;outline:none;background:var(--card-bg);color:var(--text)">
-      <button onclick="submitExReview('${p._id}')" style="background:var(--coral);color:#fff;border:none;border-radius:10px;padding:6px 14px;font-weight:700;font-size:.78rem;cursor:pointer">Invia</button>
-    </div>`:''}
-    ${p.text&&!p.exerciseId?`<div class="post-body" style="font-size:.85rem">${escHTML(p.text)}</div>`:''}
-    <div class="post-actions" style="padding-top:4px">
-      <button class="action-btn${ME&&(p.likes||[]).includes(ME._id)?' liked':''}" id="like-btn-${p._id}" onclick="likePost('${p._id}',this)"><span class="like-icon">${ME&&(p.likes||[]).includes(ME._id)?'❤️':'🤍'}</span> ${(p.likes||[]).length}</button>
-      <button class="action-btn" onclick="toggleComments('${p._id}')">💬 <span id="ccount-${p._id}">0</span></button>
-    </div>
-    <div class="comments-box" id="cmts-${p._id}"><div id="cmts-list-${p._id}"></div>
-    ${ME?`<div class="comment-input-row"><input class="comment-input" id="ci-${p._id}" data-pid="${p._id}" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment('${p._id}')">➤</button></div>`:''}</div>
-  </div>`;
+  var starsHtml='';
+  if(stars){starsHtml='<div style="margin-top:6px;display:flex;gap:2px">';for(var si=1;si<=5;si++){starsHtml+='<span style="color:'+(si<=stars?'#FFD700':'rgba(0,0,0,.15)')+';font-size:.95rem">★</span>';}starsHtml+='</div>';}
+  // Solo l'autore dell'esercizio puo recensire il proprio risultato
+  const isMyExercise = ME && ME._id === p.userId;
+  const canRate = isMyExercise && !p.rating;
+  const canDel = ME && (ME._id === p.userId || (ME.role === 'admin' || ME.role === 'superadmin'));
+  var starPickerHtml = '';
+  if(canRate){
+    starPickerHtml = '<div id="rate-box-'+p._id+'" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;padding:8px 0;border-top:1px solid rgba(0,0,0,.06)">';
+    starPickerHtml += '<span style="font-size:.78rem;font-weight:700;color:var(--muted)">Valuta:</span>';
+    starPickerHtml += '<div class="star-picker" id="star-pick-'+p._id+'">';
+    for(var ri=1;ri<=5;ri++){
+      starPickerHtml += '<span class="star-pick-btn" data-val="'+ri+'" onclick="pickExStar(\''+p._id+'\','+ri+')" style="cursor:pointer;font-size:1.2rem;color:rgba(0,0,0,.15);transition:color .15s">★</span>';
+    }
+    starPickerHtml += '</div>';
+    starPickerHtml += '<input type="text" id="rev-text-'+p._id+'" placeholder="Breve recensione..." maxlength="200" style="flex:1;min-width:120px;border:1.5px solid rgba(0,0,0,.08);border-radius:10px;padding:6px 10px;font-family:var(--fb);font-size:.78rem;outline:none;background:var(--card-bg);color:var(--text)">';
+    starPickerHtml += '<button onclick="submitExReview(\''+p._id+'\')" style="background:var(--coral);color:#fff;border:none;border-radius:10px;padding:6px 14px;font-weight:700;font-size:.78rem;cursor:pointer">Invia</button>';
+    starPickerHtml += '</div>';
+  }
+  return '<div class="feed-post exercise-card" id="post-'+p._id+'">'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+    + '<div class="avatar-circle" style="width:38px;height:38px;background:'+pickColor(a.username)+';cursor:pointer;font-size:.9rem;overflow:hidden;flex-shrink:0" onclick="viewUser(\''+a._id+'\')">'+(a.avatarUrl?'<img src="'+a.avatarUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':a.avatar||initials(a.username))+'</div>'
+    + '<div style="flex:1;min-width:0"><strong style="font-size:.85rem;display:block">'+escHTML(a.username)+'</strong><span style="font-size:.7rem;color:var(--muted)">'+timeAgo(p.timestamp)+'</span></div>'
+    + '<div style="font-family:var(--fh);font-size:1.5rem;font-weight:800;color:'+scoreColor+'">'+score+'%</div>'
+    + (canDel?'<button onclick="deletePost(\''+p._id+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px;margin-left:4px">🗑️</button>':'')
+    + '</div>'
+    + '<div style="background:rgba(156,124,255,.06);border-radius:12px;padding:12px 14px;margin-bottom:8px">'
+    + '<div style="font-weight:700;font-size:.88rem;color:var(--purple)">'+escHTML(p.exerciseTitle||'Esercizio')+'</div>'
+    + (p.exerciseLevel?'<div style="font-size:.72rem;color:var(--muted);margin-top:2px">'+p.exerciseLevel+'</div>':'')
+    + starsHtml
+    + (p.review?'<div style="font-size:.82rem;color:var(--text);margin-top:6px">"'+escHTML(p.review)+'"</div>':'')
+    + '</div>'
+    + starPickerHtml
+    + '<div class="post-actions" style="padding-top:4px">'
+    + '<button class="action-btn'+(ME&&(p.likes||[]).includes(ME._id)?' liked':'')+'" id="like-btn-'+p._id+'" onclick="likePost(\''+p._id+'\',this)"><span class="like-icon">'+(ME&&(p.likes||[]).includes(ME._id)?'❤️':'🤍')+'</span> '+(p.likes||[]).length+'</button>'
+    + '<button class="action-btn" onclick="toggleComments(\''+p._id+'\')">💬 <span id="ccount-'+p._id+'">0</span></button>'
+    + '</div>'
+    + '<div class="comments-box" id="cmts-'+p._id+'"><div id="cmts-list-'+p._id+'"></div>'
+    + (ME?'<div class="comment-input-row"><input class="comment-input" id="ci-'+p._id+'" data-pid="'+p._id+'" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment(\''+p._id+'\')">➤</button></div>':'')
+    + '</div></div>';
 }
 
 let _pickedExStars = {};

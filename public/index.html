@@ -219,17 +219,17 @@
     <!-- LOGIN -->
     <div id="login-form" class="auth-form">
       <div class="auth-error-box" id="login-err"></div>
-      <div class="auth-field"><label>📧 Email</label><input type="email" id="l-email" placeholder="la-tua@email.com" autocomplete="email" oninput="clearAuthErr('login')"></div>
-      <div class="auth-field"><label>🔒 Password</label><input type="password" id="l-pwd" placeholder="••••••••" autocomplete="current-password" oninput="clearAuthErr('login')"></div>
-      <button class="auth-submit" id="login-submit-btn" onclick="doLogin()">🚀 Accedi</button>
+      <div class="auth-field"><label>Email</label><input type="email" id="l-email" placeholder="la-tua@email.com" autocomplete="email" oninput="clearAuthErr('login')"></div>
+      <div class="auth-field"><label>Password</label><div style="position:relative"><input type="password" id="l-pwd" placeholder="••••••••" autocomplete="current-password" oninput="clearAuthErr('login')" style="padding-right:44px"><button type="button" onclick="togglePwdEye('l-pwd',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px;color:var(--muted)">👁</button></div></div>
+      <button class="auth-submit" id="login-submit-btn" onclick="doLogin()">Accedi</button>
       <p style="text-align:center;font-size:.8rem;color:var(--muted)">Continua come <strong style="color:var(--coral);cursor:pointer" onclick="closeAuth()">ospite</strong> (senza salvare progressi)</p>
     </div>
     <!-- REGISTER -->
     <div id="register-form" class="auth-form hidden">
       <div class="auth-error-box" id="register-err"></div>
-      <div class="auth-field"><label>👤 Username</label><input type="text" id="r-username" placeholder="il_tuo_nome" oninput="clearAuthErr('register')"></div>
-      <div class="auth-field"><label>📧 Email</label><input type="email" id="r-email" placeholder="la-tua@email.com" oninput="clearAuthErr('register')"></div>
-      <div class="auth-field"><label>🔒 Password <small>(min. 6 caratteri)</small></label><input type="password" id="r-pwd" placeholder="••••••••" oninput="clearAuthErr('register')"></div>
+      <div class="auth-field"><label>Username</label><input type="text" id="r-username" placeholder="il_tuo_nome" oninput="clearAuthErr('register')"></div>
+      <div class="auth-field"><label>Email</label><input type="email" id="r-email" placeholder="la-tua@email.com" oninput="clearAuthErr('register')"></div>
+      <div class="auth-field"><label>Password <small>(min. 6 caratteri)</small></label><div style="position:relative"><input type="password" id="r-pwd" placeholder="••••••••" oninput="clearAuthErr('register')" style="padding-right:44px"><button type="button" onclick="togglePwdEye('r-pwd',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px;color:var(--muted)">👁</button></div></div>
       <button class="opt-toggle-btn" onclick="toggleOptional()">➕ Aggiungi info profilo (facoltativo)</button>
       <div class="opt-fields" id="opt-fields">
         <div class="auth-field"><label>🌍 Lingua madre</label>

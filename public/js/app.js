@@ -53,6 +53,13 @@ const POST=(p,b)=>apicall('POST',p,b);
 const PUT=(p,b)=>apicall('PUT',p,b);
 const DEL=(p)=>apicall('DELETE',p);
 
+function togglePwdEye(inputId, btn) {
+  var inp = document.getElementById(inputId);
+  if (!inp) return;
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+  else { inp.type = 'password'; btn.textContent = '👁'; }
+}
+
 /* ============================================================
    STATE
 ============================================================ */
@@ -2360,10 +2367,10 @@ async function promoteUser(uid){
 }
 
 async function resetUserPassword(uid, username){
-  if(!confirm(`Vuoi reimpostare la password di ${username}?\n\nLa nuova password sarà: Utente2026!\n\nL'utente verrà disconnesso e dovrà rifare il login.`))return;
+  if(!confirm('Vuoi reimpostare la password di '+username+'?\n\nLa nuova password sara: cambia26\n\nL\'utente verra disconnesso e dovra rifare il login.'))return;
   try{
     const r=await POST('/api/admin/users/'+uid+'/reset-password');
-    toast(`🔑 Password di ${r.username} reimpostata a "Utente2026!"`, 'success', 5000);
+    toast('Password di '+r.username+' reimpostata a "cambia26"', 'success', 5000);
     renderSuperadmin();
   }catch(e){toast(e.message,'error');}
 }
@@ -5545,122 +5552,112 @@ setInterval(()=>{
 //  v10 NEW FEATURES
 // ============================================================
 
-// ── Desktop Blocker — Anti-bypass HARDCORE v2 ──
+// ── APP GATE: solo PWA — blocca TUTTI i browser ──
 (function(){
-  const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (isPWA) return; // PWA sempre permessa
 
-  function isRealMobile() {
-    const hasTouch = 'ontouchstart' in window && navigator.maxTouchPoints > 0;
-    const ua = navigator.userAgent || '';
-    const mobileUA = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(ua);
-    const mobilePlatform = /Android|iPhone|iPad|iPod/.test(navigator.platform || '');
-    const screenReal = window.screen.width <= 1024 && window.screen.height <= 1400;
-    const suspectedEmulation = mobileUA && !screenReal && !mobilePlatform;
-    if (suspectedEmulation) return false;
-    return (hasTouch && mobileUA) || mobilePlatform;
-  }
+  var ua = navigator.userAgent || '';
+  var isAndroid = /Android/i.test(ua);
+  var isIOS = /iPhone|iPad|iPod/i.test(ua);
+  var _deferredPrompt = null;
 
-  const _isDesktop = !isRealMobile();
-
-  // ── Se desktop: inietta blocker diretto e blocca TUTTO ──
-  function nukeContent() {
-    // Rimuovi tutto il body tranne il blocker
-    document.querySelectorAll('body > *').forEach(el => {
-      if (el.id !== 'desktop-blocker') el.remove();
-    });
-  }
-
-  function createBlocker() {
-    let b = document.getElementById('desktop-blocker');
-    if (!b) {
-      b = document.createElement('div');
-      b.id = 'desktop-blocker';
-      document.body.insertBefore(b, document.body.firstChild);
-    }
-    b.style.cssText = 'position:fixed;inset:0;z-index:999999;background:linear-gradient(135deg,#0a0a1a 0%,#1a1a3a 50%,#0a0a1a 100%);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;padding:40px;';
-    b.innerHTML = '<div style="max-width:420px"><div style="font-size:4rem;margin-bottom:20px">📱</div><div style="font-family:Poppins,sans-serif;font-size:2rem;margin-bottom:12px">GiadaCourses</div><div style="font-size:1rem;opacity:.7;line-height:1.6;margin-bottom:24px">Questa app e progettata per dispositivi mobili.<br>Per la migliore esperienza, apri GiadaCourses dal tuo smartphone.</div><div style="display:inline-block;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);padding:8px 20px;border-radius:12px;font-weight:700;font-size:.85rem">Modalita Desktop in costruzione</div></div>';
-    document.body.style.overflow = 'hidden';
-    return b;
-  }
-
-  if (_isDesktop) {
-    createBlocker();
-    nukeContent();
-
-    // ── LIVELLO 1: MutationObserver — se il blocker viene rimosso/nascosto, ricrealo e nuka ──
-    const _blockerGuard = new MutationObserver(() => {
-      const b = document.getElementById('desktop-blocker');
-      if (!b || b.style.display === 'none' || b.style.visibility === 'hidden' || b.style.opacity === '0' || getComputedStyle(b).display === 'none') {
-        createBlocker();
-        nukeContent();
-      }
-    });
-    _blockerGuard.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-
-    // ── LIVELLO 2: Polling continuo ogni 500ms ──
-    setInterval(() => {
-      const b = document.getElementById('desktop-blocker');
-      if (!b || getComputedStyle(b).display === 'none' || getComputedStyle(b).visibility === 'hidden') {
-        createBlocker();
-        nukeContent();
-      }
-      // Assicurati che il body non sia scrollabile
-      document.body.style.overflow = 'hidden';
-    }, 500);
-
-    // ── LIVELLO 3: Rileva DevTools via dimensione finestra ──
-    let _devtoolsOpen = false;
-    function checkDevTools() {
-      const widthThreshold = window.outerWidth - window.innerWidth > 160;
-      const heightThreshold = window.outerHeight - window.innerHeight > 300;
-      if (widthThreshold || heightThreshold) {
-        if (!_devtoolsOpen) {
-          _devtoolsOpen = true;
-          createBlocker();
-          nukeContent();
-        }
-      }
-    }
-    setInterval(checkDevTools, 1000);
-    window.addEventListener('resize', checkDevTools);
-
-    // ── LIVELLO 4: Override console per rendere inutile l'ispezione ──
-    try {
-      Object.defineProperty(window, '__debug_check', {
-        get: function() { createBlocker(); nukeContent(); }
-      });
-    } catch(e) {}
-  }
-
-  // ── Blocca tasto destro fuori dalle aree chat (anche su mobile) ──
-  document.addEventListener('contextmenu', function(e) {
-    const target = e.target;
-    const inChat = target.closest('.dm-sheet, .comment-input, [contenteditable], textarea, input[type="text"]');
-    if (!inChat) e.preventDefault();
+  // Cattura evento beforeinstallprompt per Android
+  window.addEventListener('beforeinstallprompt', function(e) {
+    e.preventDefault();
+    _deferredPrompt = e;
+    var btn = document.getElementById('gc-install-btn');
+    if (btn) btn.style.display = 'block';
   });
 
-  // ── Blocca shortcut DevTools ──
+  function createGate() {
+    var b = document.getElementById('gc-app-gate');
+    if (!b) {
+      b = document.createElement('div');
+      b.id = 'gc-app-gate';
+      document.body.insertBefore(b, document.body.firstChild);
+    }
+    b.style.cssText = 'position:fixed;inset:0;z-index:999999;background:linear-gradient(160deg,#0a0a1a 0%,#1E1E3F 40%,#2a1a4a 100%);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;padding:30px;overflow-y:auto';
+
+    var content = '<div style="max-width:380px;width:100%">';
+    content += '<div style="width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:2rem;box-shadow:0 8px 24px rgba(156,124,255,.3)">GC</div>';
+    content += '<div style="font-family:Poppins,sans-serif;font-size:1.6rem;font-weight:800;margin-bottom:8px">GiadaCourses</div>';
+    content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:28px">Per utilizzare GiadaCourses devi installare l\'app nella schermata home del tuo dispositivo.</div>';
+
+    if (isAndroid) {
+      content += '<button id="gc-install-btn" onclick="gcInstallApp()" style="width:100%;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);color:#fff;border:none;border-radius:16px;padding:16px;font-family:Poppins,sans-serif;font-weight:800;font-size:1rem;cursor:pointer;margin-bottom:14px;box-shadow:0 6px 20px rgba(156,124,255,.35)">Installa App</button>';
+      content += '<div style="font-size:.78rem;opacity:.5;line-height:1.5">Se il bottone non funziona:<br>Tocca i tre puntini del browser e scegli "Aggiungi a schermata Home"</div>';
+    } else if (isIOS) {
+      content += '<div style="background:rgba(255,255,255,.08);border-radius:16px;padding:18px;text-align:left;margin-bottom:14px">';
+      content += '<div style="font-weight:700;font-size:.9rem;margin-bottom:12px">Come installare su iPhone:</div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px"><div style="background:rgba(255,255,255,.15);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">1</div><div style="font-size:.82rem;opacity:.8">Apri questa pagina in <strong>Safari</strong></div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px"><div style="background:rgba(255,255,255,.15);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">2</div><div style="font-size:.82rem;opacity:.8">Tocca il pulsante <strong>Condividi</strong> (quadrato con freccia in basso)</div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px"><div style="background:rgba(255,255,255,.15);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">3</div><div style="font-size:.82rem;opacity:.8">Scorri e tocca <strong>"Aggiungi a Home"</strong></div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:10px"><div style="background:rgba(255,255,255,.15);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">4</div><div style="font-size:.82rem;opacity:.8">Tocca <strong>"Aggiungi"</strong> in alto a destra</div></div>';
+      content += '</div>';
+    } else {
+      content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:16px">Apri questa pagina dal tuo smartphone Android o iPhone e installa l\'app dalla schermata home.</div>';
+      content += '<div style="display:inline-block;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);padding:10px 24px;border-radius:12px;font-weight:700;font-size:.85rem">Solo dispositivi mobili</div>';
+    }
+    content += '</div>';
+    b.innerHTML = content;
+    document.body.style.overflow = 'hidden';
+  }
+
+  window.gcInstallApp = function() {
+    if (_deferredPrompt) {
+      _deferredPrompt.prompt();
+      _deferredPrompt.userChoice.then(function(r) {
+        if (r.outcome === 'accepted') { location.reload(); }
+        _deferredPrompt = null;
+      });
+    } else {
+      alert('Tocca i tre puntini del browser in alto a destra e scegli "Aggiungi a schermata Home"');
+    }
+  };
+
+  // Rimuovi tutto il contenuto, mostra solo il gate
+  function nukeContent() {
+    document.querySelectorAll('body > *').forEach(function(el) {
+      if (el.id !== 'gc-app-gate') el.remove();
+    });
+  }
+
+  createGate();
+  nukeContent();
+
+  // Guard: ricrea se rimosso
+  var _gateGuard = new MutationObserver(function() {
+    var b = document.getElementById('gc-app-gate');
+    if (!b || getComputedStyle(b).display === 'none') { createGate(); nukeContent(); }
+  });
+  _gateGuard.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+  setInterval(function() {
+    var b = document.getElementById('gc-app-gate');
+    if (!b || getComputedStyle(b).display === 'none') { createGate(); nukeContent(); }
+    document.body.style.overflow = 'hidden';
+  }, 500);
+
+  // Anti-DevTools
+  document.addEventListener('contextmenu', function(e) {
+    var inChat = e.target.closest('.dm-sheet, .comment-input, [contenteditable], textarea, input[type="text"]');
+    if (!inChat) e.preventDefault();
+  });
   document.addEventListener('keydown', function(e) {
     if (e.key === 'F12') { e.preventDefault(); return false; }
     if (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase())) { e.preventDefault(); return false; }
     if (e.ctrlKey && e.key.toUpperCase() === 'U') { e.preventDefault(); return false; }
-    // Ctrl+S (salva pagina)
     if (e.ctrlKey && e.key.toUpperCase() === 'S') { e.preventDefault(); return false; }
   });
 
-  // ── Anti copia/incolla fuori dalle chat ──
+  // Anti copia fuori dalle chat
   document.addEventListener('copy', function(e) {
-    const target = e.target;
-    const allowed = target.closest('.dm-sheet, .comment-input, .post-body, [contenteditable], textarea, input[type="text"], .comment-bubble, .feed-post .post-body');
-    if (!allowed) { e.preventDefault(); }
+    var allowed = e.target.closest('.dm-sheet, .comment-input, .post-body, [contenteditable], textarea, input[type="text"], .comment-bubble');
+    if (!allowed) e.preventDefault();
   });
-
-  // Disabilita selezione testo fuori dalle aree permesse
   document.addEventListener('selectstart', function(e) {
-    const target = e.target;
-    const allowed = target.closest('.dm-sheet, .comment-input, .post-body, [contenteditable], textarea, input, .comment-bubble');
-    if (!allowed) { e.preventDefault(); }
+    var allowed = e.target.closest('.dm-sheet, .comment-input, .post-body, [contenteditable], textarea, input, .comment-bubble');
+    if (!allowed) e.preventDefault();
   });
 })();
 

@@ -259,6 +259,8 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
+      { version: '10.4', date: '2026-03-27', title: 'Social Revolution + Fix Critici', changes: ['Feed diviso in Thread, Reels ed Esercizi','Reels multi-media con carousel swipeable','Sistema recensioni esercizi con stelle','Storie redesign Instagram-style con swipe up','Fix chiamate e sfide 1v1 (Socket.IO)','Password reset sicuro con cambio obbligatorio','Blocker desktop anti-bypass a 4 livelli','Fix pull-to-refresh accidentale','Auto-reconnect SSE quando app torna in primo piano'] },
+      { version: '10.1', date: '2026-03-26', title: 'Sicurezza + Dark Mode + Backup', changes: ['Dark mode toggle nel profilo','Bottom nav scrollabile per mobile','Fix errore Log IP nelle Analytics','Script BACKUP_FULL.sh per VPS + GitHub','Script UPDATE.sh per aggiornamento rapido','Security hardening con input sanitization','Fix durata storie 3-15s','Sfondi storie puliti senza emoji'] },
       { version: '10.0', date: '2026-03-25', title: 'Architettura Modulare + Gruppi + Dark Mode', changes: ['Server ristrutturato in moduli','Gruppi chat','Dark mode','Listening Quiz','Banner desktop','Chiamate migliorate con ringtone','Notifiche DM attivabili','Verifica utenti da Giada','Storie con durata 3-15s'] },
       { version: '9.0', date: '2026-03-25', title: 'Redesign + Giochi + Novita', changes: ['Nuova sezione Giochi','Word Scramble + Speed Match + Fill the Gap','Sezione Novita con changelog e consigli','Suggerimenti esercizi per Giada'] },
       { version: '8.0', date: '2026-03-24', title: 'Security Hardened', changes: ['CORS sicuro','Rate limiting','Anti-cheat sfide','Campanellina notifiche','Validazione upload'] },

@@ -12,6 +12,28 @@ function initials(name){return(name||'?').split(/[\s_]+/).map(w=>w[0]||'').join(
 function timeAgo(ts){const d=Date.now()-ts;if(d<60e3)return 'adesso';if(d<3600e3)return Math.floor(d/60e3)+'m fa';if(d<86400e3)return Math.floor(d/3600e3)+'h fa';return Math.floor(d/86400e3)+'g fa';}
 function fmtDate(ts){return new Date(ts).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'});}
 
+/* ── BLOCCA PULL-TO-REFRESH NATIVO (definitivo) ── */
+(function(){
+  var _lastTouchY = 0;
+  document.addEventListener('touchstart', function(e) {
+    _lastTouchY = e.touches[0].clientY;
+  }, {passive: true});
+  document.addEventListener('touchmove', function(e) {
+    var touchY = e.touches[0].clientY;
+    var dy = touchY - _lastTouchY;
+    // Blocca pull-down solo se il documento è scrollato in cima
+    if (dy > 0 && document.documentElement.scrollTop <= 0 && document.body.scrollTop <= 0) {
+      // Controlla se il target è dentro un elemento scrollabile
+      var el = e.target;
+      var inScroller = false;
+      while(el && el !== document.body) {
+        if (el.scrollTop > 0) { inScroller = true; break; }
+        el = el.parentElement;
+      }
+      if (!inScroller) { e.preventDefault(); }
+    }
+  }, {passive: false});
+})();
 /* ============================================================
    API HELPER
 ============================================================ */
@@ -4382,6 +4404,15 @@ function showChallengeInvite(cid, fromId, fromName, fromAvatar) {
 let sseSource=null;
 let _sseErrCount=0;
 
+function _gcVisReconnect(){
+  if(document.visibilityState==='visible' && ME){
+    // Riconnetti Socket.IO se disconnesso
+    if(ioSocket && ioSocket.disconnected){ try{ioSocket.connect();}catch{} }
+    // Riconnetti SSE se chiuso
+    if(!sseSource || sseSource.readyState === 2){ setTimeout(function(){if(ME)startSSE();},500); }
+  }
+}
+
 function playNotificationSound(){
   // Singolo beep per notifiche generali
   try{
@@ -4775,6 +4806,10 @@ function startSSE(){
     const delay=Math.min(15000, 1000 * Math.pow(2, Math.min(_sseErrCount-1, 4)));
     setTimeout(()=>{ if(ME){startSSE();} }, delay);
   };
+
+  // ── Auto-reconnect quando l'app torna in primo piano ──
+  document.removeEventListener('visibilitychange', _gcVisReconnect);
+  document.addEventListener('visibilitychange', _gcVisReconnect);
 
   // ── Live viewer joined (host only): create WebRTC offer for new viewer (with dedup) ──
   onEvent('live_viewer_joined', async d => {

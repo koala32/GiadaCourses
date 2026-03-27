@@ -306,15 +306,38 @@ module.exports = function(app, sharedState) {
     await db.users.updateAsync({ _id:req.params.id }, { $set:{role:req.body.role} });
     res.json({ ok:true });
   });
+  app.put('/api/admin/users/:id/edit', requireAuth, requireRole('superadmin'), async (req, res) => {
+    try {
+      const { username, email } = req.body;
+      const updates = {};
+      if (username && username.trim()) updates.username = username.trim();
+      if (email && email.trim()) updates.email = email.trim().toLowerCase();
+      if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nessuna modifica' });
+      await db.users.updateAsync({ _id: req.params.id }, { $set: updates });
+      res.json({ ok: true });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
   app.post('/api/admin/users/:id/reset-password', requireAuth, requireRole('superadmin'), async (req, res) => {
     try {
       const user = await db.users.findOneAsync({ _id: req.params.id });
       if (!user) return res.status(404).json({ error: 'Non trovato' });
       if (user.role === 'superadmin') return res.status(403).json({ error: 'Non puoi reimpostare superadmin' });
-      const tempPwd = crypto.randomBytes(4).toString('hex') + 'A1!';
-      await db.users.updateAsync({ _id: req.params.id }, { $set: { passwordHash: await bcrypt.hash(tempPwd, 12) } });
+      const tempPwd = 'cambia26';
+      const hash = await bcrypt.hash(tempPwd, 12);
+      await db.users.updateAsync({ _id: req.params.id }, { $set: { passwordHash: hash, mustChangePassword: true } });
       await db.sessions.removeAsync({ userId: req.params.id }, { multi: true });
       res.json({ ok: true, username: user.username, tempPassword: tempPwd });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Endpoint per cambio password obbligatorio ──
+  app.post('/api/auth/force-change-password', requireAuth, async (req, res) => {
+    try {
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Password minimo 6 caratteri' });
+      const hash = await bcrypt.hash(newPassword, 12);
+      await db.users.updateAsync({ _id: req.user._id }, { $set: { passwordHash: hash, mustChangePassword: false } });
+      res.json({ ok: true });
     } catch(e) { res.status(500).json({ error: e.message }); }
   });
   app.get('/api/admin/stats', requireAuth, requireRole('superadmin'), async (req, res) => {

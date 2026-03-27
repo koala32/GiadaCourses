@@ -56,7 +56,7 @@ module.exports = function(app) {
       const token = crypto.randomBytes(32).toString('hex');
       await db.sessions.insertAsync({ token, userId: user._id, createdAt: Date.now() });
       const { passwordHash, ...safe } = user;
-      res.json({ user: safe, token });
+      res.json({ user: safe, token, mustChangePassword: !!user.mustChangePassword });
     } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
   });
 

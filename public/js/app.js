@@ -161,13 +161,18 @@ async function doLogin(){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){showAuthErr('login','Email non valida. Controlla il formato (es. nome@email.com).',['l-email']);return;}
   if(!password){showAuthErr('login','Inserisci la password.','l-pwd');return;}
   const btn=document.getElementById('login-submit-btn');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Accesso...';}
+  if(btn){btn.disabled=true;btn.textContent='Accesso...';}
   try{
     const r=await POST('/api/auth/login',{email,password});
     localStorage.setItem('gc_token',r.token);
     ME=r.user;
     closeAuth();
-    toast(`Bentornato ${ME.username}! 🎉`);
+    // Se deve cambiare password, mostra il modal
+    if(r.mustChangePassword){
+      showForcePasswordChange();
+    } else {
+      toast('Bentornato '+ME.username+'!');
+    }
     renderNavUser();
     startSSE();
     renderHome();
@@ -181,7 +186,43 @@ async function doLogin(){
       showAuthErr('login','Errore di connessione. Riprova tra un momento.',[]);
     }
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='🚀 Accedi';}
+    if(btn){btn.disabled=false;btn.textContent='Accedi';}
+  }
+}
+
+function showForcePasswordChange(){
+  var overlay = document.createElement('div');
+  overlay.id = 'force-pwd-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(10,10,26,.95);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = '<div style="background:var(--card-bg);border-radius:24px;width:100%;max-width:380px;padding:28px 24px;box-shadow:0 16px 48px rgba(0,0,0,.3)">'
+    + '<h2 style="font-family:var(--fh);font-size:1.4rem;margin-bottom:8px;color:var(--dark)">Cambia password</h2>'
+    + '<p style="font-size:.85rem;color:var(--muted);margin-bottom:20px;line-height:1.5">La tua password e stata reimpostata dall\'amministratore. Scegli una nuova password per continuare.</p>'
+    + '<div class="field" style="margin-bottom:12px"><label style="font-weight:700;font-size:.85rem;margin-bottom:4px;display:block">Nuova password</label><input type="password" id="force-new-pwd" placeholder="Min. 6 caratteri" style="width:100%;border:2px solid rgba(0,0,0,.08);border-radius:12px;padding:12px 14px;font-family:var(--fb);font-size:.92rem;outline:none;background:var(--bg);color:var(--text)"></div>'
+    + '<div class="field" style="margin-bottom:20px"><label style="font-weight:700;font-size:.85rem;margin-bottom:4px;display:block">Conferma password</label><input type="password" id="force-confirm-pwd" placeholder="Ripeti la password" style="width:100%;border:2px solid rgba(0,0,0,.08);border-radius:12px;padding:12px 14px;font-family:var(--fb);font-size:.92rem;outline:none;background:var(--bg);color:var(--text)"></div>'
+    + '<div id="force-pwd-err" style="display:none;color:#FF3B30;font-size:.82rem;font-weight:700;margin-bottom:12px"></div>'
+    + '<button onclick="submitForcePassword()" class="btn-primary" style="border-radius:14px;padding:14px">Salva nuova password</button>'
+    + '</div>';
+  document.body.appendChild(overlay);
+}
+
+async function submitForcePassword(){
+  var pwd = document.getElementById('force-new-pwd')?.value;
+  var confirm = document.getElementById('force-confirm-pwd')?.value;
+  var errEl = document.getElementById('force-pwd-err');
+  if(!pwd || pwd.length < 6){
+    if(errEl){errEl.style.display='block';errEl.textContent='La password deve avere almeno 6 caratteri.';}
+    return;
+  }
+  if(pwd !== confirm){
+    if(errEl){errEl.style.display='block';errEl.textContent='Le password non coincidono.';}
+    return;
+  }
+  try{
+    await POST('/api/auth/force-change-password',{newPassword:pwd});
+    document.getElementById('force-pwd-overlay')?.remove();
+    toast('Password cambiata con successo!');
+  }catch(e){
+    if(errEl){errEl.style.display='block';errEl.textContent=e.message||'Errore';}
   }
 }
 
@@ -2373,111 +2414,132 @@ async function loadStories(){
 function openStoryCreator(){
   if(!ME){openAuth();return;}
   storySelectedFilter='none';storySelectedMusic='none';storyTextLayers=[];
-  
-  // Tutorial una tantum
-  const showTutorial = !localStorage.getItem('gc_story_tutorial');
-  
-  const modal=document.createElement('div');
+  pendingStoryMedia=null;window._storyBgTemplate=null;
+  var showTut = !localStorage.getItem('gc_story_tut_v3');
+  var modal=document.createElement('div');
   modal.id='story-creator-modal';
-  modal.style.cssText='position:fixed;inset:0;z-index:9700;background:rgba(10,10,26,.97);display:flex;flex-direction:column;align-items:center;overflow-y:auto;-webkit-overflow-scrolling:touch';
-  modal.innerHTML=`
-    ${showTutorial?`
-    <div id="story-tutorial" style="position:absolute;inset:0;z-index:10;background:rgba(10,10,26,.98);display:flex;align-items:center;justify-content:center;padding:20px">
-      <div style="max-width:340px;text-align:center;color:#fff">
-        <div style="font-size:3.5rem;margin-bottom:16px;animation:float 2s ease-in-out infinite">&#x1F4F8;</div>
-        <div style="font-family:var(--fh);font-size:1.5rem;margin-bottom:12px">Crea la tua prima Storia!</div>
-        <div style="font-size:.88rem;line-height:1.6;opacity:.8;margin-bottom:24px">
-          Le storie durano <strong style="color:var(--coral)">24 ore</strong> e puoi scegliere la durata da <strong>3 a 15 secondi</strong>.<br><br>
-          &#x1F4F7; Carica una <strong>foto</strong> o un <strong>video</strong><br>
-          &#x1F3A8; Oppure scegli uno <strong>sfondo colorato</strong><br>
-          &#x270D;&#xFE0F; Aggiungi <strong>testo trascinabile</strong><br>
-          &#x1F3B5; Scegli una <strong>musica</strong> di sottofondo<br>
-          &#x2728; Applica un <strong>filtro</strong> fotografico
-        </div>
-        <button onclick="document.getElementById('story-tutorial').remove();localStorage.setItem('gc_story_tutorial','1')" style="background:linear-gradient(135deg,var(--coral),var(--orange));color:#fff;border:none;border-radius:16px;padding:14px 32px;font-family:var(--fb);font-weight:800;font-size:1rem;cursor:pointer;width:100%;box-shadow:0 6px 20px rgba(255,107,107,.4)">Ho capito, iniziamo!</button>
-      </div>
-    </div>
-    `:''}
-    <div style="width:100%;max-width:500px;padding:16px 16px calc(20px + var(--sab,0px))">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <h3 style="font-family:var(--fh);font-size:1.2rem;color:#fff">Crea Storia</h3>
-        <button onclick="closeStoryCreator()" style="background:rgba(255,255,255,.1);border:none;border-radius:50%;width:34px;height:34px;color:#fff;cursor:pointer;font-size:1rem">&#x2715;</button>
-      </div>
-      <div id="sc-preview" style="width:100%;aspect-ratio:9/16;max-height:420px;border-radius:20px;background:rgba(255,255,255,.04);border:2px dashed rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;margin-bottom:14px;overflow:hidden;position:relative;box-shadow:0 8px 32px rgba(0,0,0,.3)">
-        <div id="sc-placeholder" style="text-align:center;color:rgba(255,255,255,.3);padding:20px">
-          <div style="font-size:3.5rem;margin-bottom:10px">&#x1F4F7;</div>
-          <div style="font-weight:700;font-size:.92rem;margin-bottom:4px">Tocca per caricare</div>
-          <div style="font-size:.75rem;opacity:.6">Foto, video o sfondo colorato</div>
-        </div>
-      </div>
-      <!-- Bottoni media principali -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-        <label class="sc-action-btn" for="sc-img-input"><span>&#x1F4F7;</span> Foto</label>
-        <input type="file" id="sc-img-input" accept="image/*" style="display:none" onchange="handleStoryMedia(this,'image')">
-        <label class="sc-action-btn" for="sc-vid-input"><span>&#x1F3AC;</span> Video</label>
-        <input type="file" id="sc-vid-input" accept="video/*" style="display:none" onchange="handleStoryMedia(this,'video')">
-        <button class="sc-action-btn" onclick="openStoryTemplates()"><span>&#x1F3A8;</span> Sfondo</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <label class="sc-action-btn sc-secondary" for="sc-cam-input"><span>&#x1F4F8;</span> Scatta</label>
-        <input type="file" id="sc-cam-input" accept="image/*" capture="environment" style="display:none" onchange="handleStoryMedia(this,'image')">
-        <button class="sc-action-btn sc-secondary" onclick="showStoryTutorialAgain()"><span>&#x2753;</span> Tutorial</button>
-      </div>
-      <!-- Template sfondi (nascosto finche non si clicca) -->
-      <div id="sc-templates-wrap" style="display:none;margin-bottom:12px">
-        <div style="font-weight:700;font-size:.75rem;color:rgba(255,255,255,.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Scegli Sfondo</div>
-        <div class="sc-template-grid" id="sc-template-grid"></div>
-      </div>
-      <div id="sc-tools" style="display:none">
-        <!-- Durata storia -->
-        <div style="font-weight:700;font-size:.75rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Durata</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;background:rgba(255,255,255,.05);border-radius:14px;padding:10px 14px">
-          <input type="range" id="sc-duration" min="3" max="15" value="15" style="flex:1;accent-color:var(--coral)">
-          <span id="sc-duration-lbl" style="color:#fff;font-weight:800;font-size:.92rem;min-width:30px;text-align:center">15s</span>
-        </div>
-        <!-- Filtri -->
-        <div style="font-weight:700;font-size:.75rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Filtri</div>
-        <div id="sc-filters" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none;margin-bottom:14px"></div>
-        <!-- Musica -->
-        <div style="font-weight:700;font-size:.75rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Musica</div>
-        <div id="sc-music" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
-        <!-- Strumenti -->
-        <div style="display:flex;gap:8px;margin-bottom:14px">
-          <button onclick="addStoryText()" class="sc-action-btn sc-secondary" style="flex:1"><span>&#x270D;&#xFE0F;</span> Testo</button>
-          <button onclick="openStoryTagPicker()" class="sc-action-btn sc-secondary" style="flex:1"><span>&#x1F3F7;&#xFE0F;</span> Tag</button>
-        </div>
-      </div>
-      <input type="text" id="story-caption" placeholder="Didascalia (opzionale)..." style="width:100%;border:2px solid rgba(255,255,255,.08);border-radius:16px;padding:12px 16px;font-family:var(--fb);font-size:.88rem;outline:none;background:rgba(255,255,255,.06);color:#fff;margin-bottom:14px;transition:border-color .2s" onfocus="this.style.borderColor='var(--coral)'" onblur="this.style.borderColor='rgba(255,255,255,.08)'">
-      <button class="btn-primary" onclick="publishStory()" style="width:100%;padding:14px;font-size:.95rem;border-radius:16px;box-shadow:0 6px 20px rgba(255,107,107,.3)">Pubblica Storia</button>
-    </div>`;
-  document.body.appendChild(modal);
-  
-  // Duration slider
-  const durSlider=modal.querySelector('#sc-duration');
-  const durLbl=modal.querySelector('#sc-duration-lbl');
-  if(durSlider&&durLbl){
-    durSlider.oninput=()=>{ durLbl.textContent=durSlider.value+'s'; };
+  modal.style.cssText='position:fixed;inset:0;z-index:9700;background:#000;display:flex;flex-direction:column';
+  // Build HTML with string concat to avoid template literal nesting issues
+  var h = '';
+  // Fullscreen preview
+  h += '<div id="sc-preview" style="position:absolute;inset:0;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden">';
+  h += '<div id="sc-placeholder" style="text-align:center;color:rgba(255,255,255,.3);padding:20px">';
+  h += '<div style="font-size:2.5rem;margin-bottom:10px">+</div>';
+  h += '<div style="font-weight:700;font-size:.88rem">Carica una foto o un video</div>';
+  h += '<div style="font-size:.72rem;opacity:.6;margin-top:4px">oppure scegli uno sfondo</div>';
+  h += '</div></div>';
+  // Top bar
+  h += '<div style="position:absolute;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;justify-content:space-between;padding:calc(14px + var(--sat,0px)) 16px 12px;background:linear-gradient(to bottom,rgba(0,0,0,.5),transparent)">';
+  h += '<button onclick="closeStoryCreator()" style="background:rgba(255,255,255,.15);border:none;border-radius:50%;width:38px;height:38px;color:#fff;cursor:pointer;font-size:1.1rem;backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center">x</button>';
+  h += '<div style="font-family:var(--fh);font-size:1rem;color:#fff;font-weight:700">Crea Storia</div>';
+  h += '<button class="btn-primary" onclick="publishStory()" style="width:auto;padding:9px 20px;font-size:.82rem;border-radius:20px">Pubblica</button>';
+  h += '</div>';
+  // Bottom bar with media buttons
+  h += '<div id="sc-bottom-bar" style="position:absolute;bottom:0;left:0;right:0;z-index:6;padding:10px 16px calc(14px + var(--sab,0px));background:linear-gradient(to top,rgba(0,0,0,.7),transparent)">';
+  h += '<input type="text" id="story-caption" placeholder="Didascalia..." style="width:100%;border:1.5px solid rgba(255,255,255,.15);border-radius:24px;padding:10px 16px;font-family:var(--fb);font-size:.84rem;outline:none;background:rgba(255,255,255,.08);color:#fff;backdrop-filter:blur(6px);margin-bottom:10px">';
+  h += '<div style="display:flex;gap:8px;align-items:center">';
+  h += '<label class="sc-pill-btn" for="sc-img-input">Foto</label>';
+  h += '<input type="file" id="sc-img-input" accept="image/*" style="display:none" onchange="handleStoryMedia(this,\'image\')">';
+  h += '<label class="sc-pill-btn" for="sc-vid-input">Video</label>';
+  h += '<input type="file" id="sc-vid-input" accept="video/*" style="display:none" onchange="handleStoryMedia(this,\'video\')">';
+  h += '<button class="sc-pill-btn" onclick="openStoryTemplates()">Sfondo</button>';
+  h += '<label class="sc-pill-btn" for="sc-cam-input">Scatta</label>';
+  h += '<input type="file" id="sc-cam-input" accept="image/*" capture="environment" style="display:none" onchange="handleStoryMedia(this,\'image\')">';
+  h += '<div style="flex:1"></div>';
+  h += '<button id="sc-opts-btn" class="sc-pill-btn sc-accent" onclick="toggleStoryOptions()" style="display:none">Opzioni</button>';
+  h += '</div></div>';
+  // Swipe-up options panel
+  h += '<div id="sc-options-panel" class="sc-options-panel">';
+  h += '<div style="width:40px;height:4px;background:rgba(255,255,255,.2);border-radius:4px;margin:12px auto 16px;cursor:pointer" onclick="toggleStoryOptions()"></div>';
+  // Duration
+  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Durata</div>';
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;background:rgba(255,255,255,.05);border-radius:14px;padding:10px 14px">';
+  h += '<input type="range" id="sc-duration" min="3" max="15" value="15" style="flex:1;accent-color:var(--coral)">';
+  h += '<span id="sc-duration-lbl" style="color:#fff;font-weight:800;font-size:.9rem;min-width:30px;text-align:center">15s</span></div>';
+  // Filters
+  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Filtri</div>';
+  h += '<div id="sc-filters" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none;margin-bottom:16px"></div>';
+  // Music
+  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Musica</div>';
+  h += '<div id="sc-music" style="margin-bottom:16px"></div>';
+  // Text + Tags
+  h += '<div style="display:flex;gap:8px;margin-bottom:16px">';
+  h += '<button onclick="addStoryText()" class="sc-pill-btn" style="flex:1">Testo</button>';
+  h += '<button onclick="openStoryTagPicker()" class="sc-pill-btn" style="flex:1">Tag</button>';
+  h += '</div>';
+  // Templates (inside panel)
+  h += '<div id="sc-templates-wrap" style="display:none;margin-bottom:16px">';
+  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Sfondi</div>';
+  h += '<div class="sc-template-grid" id="sc-template-grid"></div>';
+  h += '</div>';
+  h += '</div>';
+  // Tutorial overlay (one-time)
+  if(showTut){
+    h += '<div id="story-tutorial" style="position:absolute;inset:0;z-index:20;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center">';
+    h += '<div style="font-family:var(--fh);font-size:1.4rem;color:#fff;margin-bottom:12px">Crea la tua Storia</div>';
+    h += '<div style="font-size:.85rem;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:24px;max-width:300px">';
+    h += 'Carica una foto o video, poi tocca <strong style="color:var(--coral)">Opzioni</strong> per aggiungere durata, filtri, musica e testo.</div>';
+    h += '<div style="font-size:2rem;margin-bottom:8px;animation:float 2s ease-in-out infinite;color:rgba(255,255,255,.6)">&#x2191;</div>';
+    h += '<div style="font-size:.78rem;color:rgba(255,255,255,.4);margin-bottom:24px">Swipe up per le opzioni</div>';
+    h += '<button onclick="document.getElementById(\'story-tutorial\').remove();localStorage.setItem(\'gc_story_tut_v3\',\'1\')" style="background:linear-gradient(135deg,var(--coral),var(--orange));color:#fff;border:none;border-radius:16px;padding:14px 32px;font-family:var(--fb);font-weight:800;font-size:.95rem;cursor:pointer;width:100%;max-width:280px">Ho capito!</button>';
+    h += '</div>';
   }
-  
+  modal.innerHTML = h;
+  document.body.appendChild(modal);
+  // Duration slider
+  var durSlider=modal.querySelector('#sc-duration');
+  var durLbl=modal.querySelector('#sc-duration-lbl');
+  if(durSlider&&durLbl){ durSlider.oninput=function(){durLbl.textContent=durSlider.value+'s';}; }
   // Render filters
-  const FILTERS=[{n:'Nessuno',c:'none'},{n:'Vivido',c:'saturate(1.5) contrast(1.1)'},{n:'Caldo',c:'sepia(.3) saturate(1.4) brightness(1.05)'},{n:'Freddo',c:'saturate(.9) hue-rotate(15deg) brightness(1.05)'},{n:'B/N',c:'grayscale(1)'},{n:'Vintage',c:'sepia(.5) contrast(.9) brightness(1.1)'},{n:'Drama',c:'contrast(1.4) brightness(.95) saturate(1.2)'},{n:'Neon',c:'brightness(1.1) contrast(1.2) saturate(1.8) hue-rotate(-10deg)'}];
-  const fc=modal.querySelector('#sc-filters');
-  FILTERS.forEach((f,i)=>{const b=document.createElement('button');b.className='sc-filter-chip'+(i===0?' active':'');b.textContent=f.n;b.onclick=()=>{storySelectedFilter=f.c;fc.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');const m=modal.querySelector('#sc-preview img,#sc-preview video');if(m)m.style.filter=f.c==='none'?'':f.c;};fc.appendChild(b);});
-  // Render music — Deezer search
-  const mc=modal.querySelector('#sc-music');
-  mc.innerHTML=`<div style="display:flex;gap:8px;width:100%">
-    <input type="text" id="sc-music-q" placeholder="Cerca una canzone..." style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px 14px;color:#fff;font-family:var(--fb);font-size:.85rem;outline:none">
-    <button onclick="searchStoryMusic()" style="background:linear-gradient(135deg,var(--teal),var(--blue));color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:700;font-size:.85rem;cursor:pointer;flex-shrink:0">🔍 Cerca</button>
-  </div>
-  <div id="sc-music-selected" style="display:none;background:rgba(78,205,196,.12);border:1px solid rgba(78,205,196,.3);border-radius:12px;padding:10px 14px;display:none;align-items:center;gap:10px">
-    <span style="animation:spin 3s linear infinite;display:inline-block;font-size:1.1rem">🎵</span>
-    <span id="sc-music-sel-title" style="color:var(--teal);font-size:.82rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-    <button onclick="removeStoryMusic()" style="background:rgba(255,107,107,.2);border:1px solid rgba(255,107,107,.3);color:#FF6B6B;border-radius:8px;padding:4px 10px;font-size:.72rem;font-weight:700;cursor:pointer;flex-shrink:0">✕ Rimuovi</button>
-  </div>
-  <div id="sc-music-results" style="max-height:220px;overflow-y:auto;scrollbar-width:thin;border-radius:12px"></div>`;
-  mc.querySelector('#sc-music-q').addEventListener('keydown',e=>{if(e.key==='Enter')searchStoryMusic();});
+  var FILTERS=[{n:'Nessuno',c:'none'},{n:'Vivido',c:'saturate(1.5) contrast(1.1)'},{n:'Caldo',c:'sepia(.3) saturate(1.4) brightness(1.05)'},{n:'Freddo',c:'saturate(.9) hue-rotate(15deg) brightness(1.05)'},{n:'B/N',c:'grayscale(1)'},{n:'Vintage',c:'sepia(.5) contrast(.9) brightness(1.1)'},{n:'Drama',c:'contrast(1.4) brightness(.95) saturate(1.2)'},{n:'Neon',c:'brightness(1.1) contrast(1.2) saturate(1.8) hue-rotate(-10deg)'}];
+  var fc=modal.querySelector('#sc-filters');
+  FILTERS.forEach(function(f,i){var b=document.createElement('button');b.className='sc-filter-chip'+(i===0?' active':'');b.textContent=f.n;b.onclick=function(){storySelectedFilter=f.c;fc.querySelectorAll('button').forEach(function(x){x.classList.remove('active')});b.classList.add('active');var m=modal.querySelector('#sc-preview img,#sc-preview video');if(m)m.style.filter=f.c==='none'?'':f.c;};fc.appendChild(b);});
+  // Render music search
+  var mc=modal.querySelector('#sc-music');
+  mc.innerHTML='<div style="display:flex;gap:8px;width:100%"><input type="text" id="sc-music-q" placeholder="Cerca una canzone..." style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:10px 14px;color:#fff;font-family:var(--fb);font-size:.85rem;outline:none"><button onclick="searchStoryMusic()" style="background:linear-gradient(135deg,var(--teal),var(--blue));color:#fff;border:none;border-radius:12px;padding:10px 16px;font-weight:700;font-size:.85rem;cursor:pointer;flex-shrink:0">Cerca</button></div><div id="sc-music-selected" style="display:none"></div><div id="sc-music-results" style="max-height:200px;overflow-y:auto;scrollbar-width:thin;border-radius:12px;margin-top:8px"></div>';
+  mc.querySelector('#sc-music-q').addEventListener('keydown',function(e){if(e.key==='Enter')searchStoryMusic();});
+  // Swipe-up gesture for options panel
+  _initStoryPanelSwipe(modal);
 }
-function closeStoryCreator(){stopStoryPreview();document.getElementById('story-creator-modal')?.remove();pendingStoryMedia=null;storyTextLayers=[];window._storyBgTemplate=null;}
+
+var _storyPanelOpen = false;
+function toggleStoryOptions(){
+  _storyPanelOpen = !_storyPanelOpen;
+  var panel = document.getElementById('sc-options-panel');
+  if(panel) panel.style.transform = _storyPanelOpen ? 'translateY(0)' : 'translateY(100%)';
+}
+
+function _initStoryPanelSwipe(modal){
+  var panel = modal.querySelector('#sc-options-panel');
+  if(!panel) return;
+  var startY=0, isDrag=false;
+  panel.addEventListener('touchstart',function(e){startY=e.touches[0].clientY;isDrag=false;},{passive:true});
+  panel.addEventListener('touchmove',function(e){
+    var dy=e.touches[0].clientY-startY;
+    if(dy>30) isDrag=true;
+  },{passive:true});
+  panel.addEventListener('touchend',function(e){
+    if(isDrag){_storyPanelOpen=false;panel.style.transform='translateY(100%)';}
+  },{passive:true});
+  // Also detect swipe-up on the preview area to open panel
+  var preview = modal.querySelector('#sc-preview');
+  if(preview){
+    var pStartY=0;
+    preview.addEventListener('touchstart',function(e){pStartY=e.touches[0].clientY;},{passive:true});
+    preview.addEventListener('touchend',function(e){
+      var dy=e.changedTouches[0].clientY-pStartY;
+      if(dy<-60){_storyPanelOpen=true;panel.style.transform='translateY(0)';}
+    },{passive:true});
+  }
+}
+
+// Show options button when media is loaded
+function _showStoryOptsBtn(){
+  var btn = document.getElementById('sc-opts-btn');
+  if(btn) btn.style.display = 'inline-flex';
+}
+
+function closeStoryCreator(){stopStoryPreview();document.getElementById('story-creator-modal')?.remove();pendingStoryMedia=null;storyTextLayers=[];window._storyBgTemplate=null;_storyPanelOpen=false;}
 
 function showStoryTutorialAgain(){
   const modal = document.getElementById('story-creator-modal');
@@ -2515,33 +2577,35 @@ const STORY_TEMPLATES=[
 ];
 
 function openStoryTemplates(){
-  const wrap=document.getElementById('sc-templates-wrap');
-  const grid=document.getElementById('sc-template-grid');
+  // Open the options panel first (templates are inside it)
+  _storyPanelOpen = true;
+  var panel = document.getElementById('sc-options-panel');
+  if(panel) panel.style.transform = 'translateY(0)';
+  var wrap=document.getElementById('sc-templates-wrap');
+  var grid=document.getElementById('sc-template-grid');
   if(!wrap||!grid)return;
   wrap.style.display='block';
-  if(grid.children.length)return; // already rendered
-  STORY_TEMPLATES.forEach(t=>{
-    const el=document.createElement('div');
+  if(grid.children.length)return;
+  STORY_TEMPLATES.forEach(function(t){
+    var el=document.createElement('div');
     el.className='sc-template-item';
-    el.style.cssText=`background:${t.bg};`;
-    el.innerHTML=`<span style="font-size:.65rem;color:#fff;font-weight:800;text-shadow:0 1px 4px rgba(0,0,0,.4)">${t.label||''}</span>`;
-    el.onclick=()=>{
-      grid.querySelectorAll('.sc-template-item').forEach(x=>x.classList.remove('selected'));
+    el.style.cssText='background:'+t.bg+';';
+    el.innerHTML='<span style="font-size:.65rem;color:#fff;font-weight:800;text-shadow:0 1px 4px rgba(0,0,0,.4)">'+(t.label||'')+'</span>';
+    el.onclick=function(){
+      grid.querySelectorAll('.sc-template-item').forEach(function(x){x.classList.remove('selected')});
       el.classList.add('selected');
       window._storyBgTemplate=t.bg;
-      pendingStoryMedia=null; // no file, using template
-      // Update preview
-      const preview=document.getElementById('sc-preview');
+      pendingStoryMedia=null;
+      var preview=document.getElementById('sc-preview');
       if(preview){
         preview.style.background=t.bg;
-        const ph=preview.querySelector('#sc-placeholder');
+        preview.querySelectorAll('img,video').forEach(function(e){e.remove()});
+        var ph=preview.querySelector('#sc-placeholder');
         if(ph)ph.style.display='none';
-        let existing=preview.querySelector('.sc-template-overlay');
+        var existing=preview.querySelector('.sc-template-overlay');
         if(existing) existing.remove();
       }
-      // Show tools
-      const tools=document.getElementById('sc-tools');
-      if(tools)tools.style.display='block';
+      _showStoryOptsBtn();
     };
     grid.appendChild(el);
   });
@@ -2690,30 +2754,29 @@ let pendingStoryMedia=null;
 function handleStoryMedia(input,type){
   const file=input.files[0];
   if(!file)return;
-  input.value=''; // reset per permettere selezione ripetuta
+  input.value='';
   if(file.size>100*1024*1024){toast('File troppo grande (max 100MB)','error');return;}
   const showInPreview=(blob,url)=>{
     pendingStoryMedia={blob,type,file:blob===file?file:null,localUrl:url};
-    window._storyBgTemplate=null; // rimuove template se si sceglie un file
+    window._storyBgTemplate=null;
     const preview=document.getElementById('sc-preview');
     if(!preview)return;
     const ph=document.getElementById('sc-placeholder');if(ph)ph.style.display='none';
-    // Remove template overlay if present
     preview.querySelector('.sc-template-overlay')?.remove();
-    preview.style.background='';
+    preview.style.background='#000';
     preview.querySelectorAll('img,video').forEach(e=>e.remove());
     if(type==='video'){
       const v=document.createElement('video');
       v.src=url; v.autoplay=true; v.loop=true; v.muted=true; v.playsInline=true;
-      v.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:18px';
+      v.style.cssText='width:100%;height:100%;object-fit:contain;position:absolute;inset:0';
       preview.insertAdjacentElement('afterbegin',v);
     } else {
       const img=document.createElement('img');
       img.src=url;
-      img.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:18px';
+      img.style.cssText='width:100%;height:100%;object-fit:contain;position:absolute;inset:0;touch-action:pinch-zoom';
       preview.insertAdjacentElement('afterbegin',img);
     }
-    const tools=document.getElementById('sc-tools');if(tools)tools.style.display='block';
+    _showStoryOptsBtn();
   };
   if(type==='image'){
     compressImage(file,1080,0.85)

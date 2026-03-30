@@ -259,10 +259,10 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
-      { version: '10.4', date: '2026-03-27', title: 'Nuova Esperienza Social', changes: ['Feed diviso in Thread, Reels ed Esercizi','Reels con foto e video multipli','Recensioni esercizi con stelle e commenti','Storie completamente ridisegnate','Chiamate e sfide tra utenti migliorate','Reset password sicuro per gli utenti','Protezione avanzata su tutti i dispositivi','Navigazione piu fluida e stabile','Aggiornamenti automatici in tempo reale'] },
-      { version: '10.1', date: '2026-03-26', title: 'Personalizzazione e Sicurezza', changes: ['Modalita scura nel profilo','Navigazione migliorata per mobile','Correzione errori nel pannello admin','Sistema di backup automatico','Protezione dati rafforzata','Durata storie personalizzabile 3-15 secondi','Sfondi storie rinnovati'] },
+      { version: '10.6', date: '2026-03-31', title: 'Sondaggi, Listening Quiz e Storie in Evidenza', changes: ['Nuovo gioco Listening Quiz con sintesi vocale','Sondaggi della community: crea e vota','Storie in evidenza sul profilo','Navigazione senza refresh accidentali','Connessione in tempo reale migliorata','Riconnessione automatica app in primo piano'] },
+      { version: '10.4', date: '2026-03-27', title: 'Nuova Esperienza Social', changes: ['Feed diviso in Thread, Reels ed Esercizi','Reels con foto e video multipli','Recensioni esercizi con stelle e commenti','Storie completamente ridisegnate','Chiamate e sfide tra utenti migliorate','Reset password sicuro per gli utenti','Protezione avanzata su tutti i dispositivi'] },
+      { version: '10.1', date: '2026-03-26', title: 'Personalizzazione e Sicurezza', changes: ['Modalita scura nel profilo','Navigazione migliorata per mobile','Correzione errori nel pannello admin','Protezione dati rafforzata','Durata storie personalizzabile 3-15 secondi','Sfondi storie rinnovati'] },
       { version: '10.0', date: '2026-03-25', title: 'Nuova Architettura', changes: ['App completamente ristrutturata','Gruppi di chat','Modalita scura','Giochi nuovi','Chiamate migliorate con suoneria','Notifiche messaggi','Storie con durata personalizzabile'] },
-      { version: '9.0', date: '2026-03-25', title: 'Giochi e Novita', changes: ['Sezione Giochi con Word Scramble, Speed Match e Fill the Gap','Sezione Novita con aggiornamenti e consigli','Suggerimenti personalizzati per gli insegnanti'] },
     ]);
   });
 
@@ -379,5 +379,103 @@ module.exports = function(app, sharedState) {
   });
   app.get('/api/client-logs', requireAuth, requireRole('superadmin'), async (req, res) => {
     res.json((await db.logs.findAsync({ type: 'client_log' })).sort((a, b) => b.timestamp - a.timestamp).slice(0, 200));
+  });
+
+  // ============================================================
+  //  POLL / SONDAGGI
+  // ============================================================
+  app.get('/api/polls', async (req, res) => {
+    try {
+      const now = Date.now();
+      const polls = await db.polls.findAsync({});
+      const enriched = [];
+      for (const p of polls) {
+        const author = await db.users.findOneAsync({ _id: p.authorId });
+        enriched.push({ ...p, author: { username: author?.username || 'Admin', avatar: author?.avatar || '', avatarUrl: author?.avatarUrl || '' } });
+      }
+      res.json(enriched.sort((a, b) => b.createdAt - a.createdAt));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/polls', requireAuth, async (req, res) => {
+    try {
+      const { question, options, duration, category } = req.body;
+      if (!question || !options || options.length < 2) return res.status(400).json({ error: 'Serve una domanda e almeno 2 opzioni' });
+      const poll = await db.polls.insertAsync({
+        question: String(question).slice(0, 300),
+        options: options.slice(0, 6).map(o => ({ text: String(o).slice(0, 100), votes: [] })),
+        authorId: req.user._id,
+        category: category || 'general',
+        duration: Math.min(168, Math.max(1, parseInt(duration) || 24)),
+        createdAt: Date.now(),
+        totalVotes: 0
+      });
+      res.json(poll);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/polls/:id/vote', requireAuth, async (req, res) => {
+    try {
+      const poll = await db.polls.findOneAsync({ _id: req.params.id });
+      if (!poll) return res.status(404).json({ error: 'Sondaggio non trovato' });
+      const { optionIndex } = req.body;
+      if (optionIndex === undefined || optionIndex < 0 || optionIndex >= poll.options.length) return res.status(400).json({ error: 'Opzione non valida' });
+      // Check if already voted
+      const already = poll.options.some(o => o.votes.includes(req.user._id));
+      if (already) return res.status(400).json({ error: 'Hai gia votato' });
+      // Add vote
+      const opts = poll.options.map((o, i) => {
+        if (i === optionIndex) return { ...o, votes: [...o.votes, req.user._id] };
+        return o;
+      });
+      await db.polls.updateAsync({ _id: req.params.id }, { $set: { options: opts, totalVotes: (poll.totalVotes || 0) + 1 } });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/polls/:id', requireAuth, async (req, res) => {
+    try {
+      const poll = await db.polls.findOneAsync({ _id: req.params.id });
+      if (!poll) return res.status(404).json({ error: 'Non trovato' });
+      if (poll.authorId !== req.user._id && req.user.role !== 'superadmin') return res.status(403).json({ error: 'Non autorizzato' });
+      await db.polls.removeAsync({ _id: req.params.id });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ============================================================
+  //  HIGHLIGHTS (storie in evidenza)
+  // ============================================================
+  app.get('/api/highlights/:userId', async (req, res) => {
+    try {
+      const highlights = await db.highlights.findAsync({ userId: req.params.userId });
+      res.json(highlights.sort((a, b) => b.createdAt - a.createdAt));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/highlights', requireAuth, async (req, res) => {
+    try {
+      const { name, storyIds, coverUrl } = req.body;
+      if (!name || !storyIds || !storyIds.length) return res.status(400).json({ error: 'Nome e storie richiesti' });
+      const stories = await db.stories.findAsync({ _id: { $in: storyIds }, userId: req.user._id });
+      const storyData = stories.map(s => ({ _id: s._id, mediaUrl: s.mediaUrl, mediaType: s.mediaType, bgTemplate: s.bgTemplate, caption: s.caption }));
+      const hl = await db.highlights.insertAsync({
+        userId: req.user._id,
+        name: String(name).slice(0, 50),
+        coverUrl: coverUrl || storyData[0]?.mediaUrl || '',
+        stories: storyData,
+        createdAt: Date.now()
+      });
+      res.json(hl);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/highlights/:id', requireAuth, async (req, res) => {
+    try {
+      const hl = await db.highlights.findOneAsync({ _id: req.params.id, userId: req.user._id });
+      if (!hl) return res.status(404).json({ error: 'Non trovato' });
+      await db.highlights.removeAsync({ _id: req.params.id });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
 };

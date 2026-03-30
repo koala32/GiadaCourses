@@ -14,26 +14,21 @@ function fmtDate(ts){return new Date(ts).toLocaleDateString('it-IT',{day:'2-digi
 
 /* ── BLOCCA PULL-TO-REFRESH NATIVO (definitivo) ── */
 (function(){
-  var _lastTouchY = 0;
-  document.addEventListener('touchstart', function(e) {
-    _lastTouchY = e.touches[0].clientY;
-  }, {passive: true});
-  document.addEventListener('touchmove', function(e) {
-    var touchY = e.touches[0].clientY;
-    var dy = touchY - _lastTouchY;
-    // Blocca pull-down solo se il documento è scrollato in cima
-    if (dy > 0 && document.documentElement.scrollTop <= 0 && document.body.scrollTop <= 0) {
-      // Controlla se il target è dentro un elemento scrollabile
-      var el = e.target;
-      var inScroller = false;
-      while(el && el !== document.body) {
-        if (el.scrollTop > 0) { inScroller = true; break; }
-        el = el.parentElement;
+  var _ptrY=0;
+  document.addEventListener('touchstart',function(e){_ptrY=e.touches[0].clientY;},{passive:true});
+  document.addEventListener('touchmove',function(e){
+    var dy=e.touches[0].clientY-_ptrY;
+    if(dy>0 && window.scrollY<=0){
+      var el=e.target;var inScroll=false;
+      while(el&&el!==document.body&&el!==document.documentElement){
+        if(el.scrollTop>0){inScroll=true;break;}
+        el=el.parentElement;
       }
-      if (!inScroller) { e.preventDefault(); }
+      if(!inScroll)e.preventDefault();
     }
-  }, {passive: false});
+  },{passive:false});
 })();
+
 /* ============================================================
    API HELPER
 ============================================================ */
@@ -1283,7 +1278,10 @@ async function renderProfile(){
       <p style="font-size:.83rem;color:var(--muted);margin-bottom:12px">Qualcosa non funziona? Segnalalo e lo risolveremo!</p>
       <button onclick="openBugReport()" style="background:linear-gradient(135deg,var(--purple),var(--blue));color:#fff;border:none;border-radius:var(--rs);padding:10px 20px;font-family:var(--fb);font-weight:700;cursor:pointer;width:100%">🐛 Invia Segnalazione</button>
     </div>
+    <div id="profile-highlights"></div>
   `;
+  // Load highlights after profile renders
+  loadHighlights(ME._id, document.getElementById('profile-highlights'));
 }
 
 let pickedAvatar=null;
@@ -1617,11 +1615,17 @@ async function renderGames(){
         <div class="game-desc">Completa le frasi scegliendo la parola giusta</div>
         <div class="game-xp">+15 XP / frase</div>
       </div>
-      <div class="game-card" style="opacity:.5;pointer-events:none">
+      <div class="game-card" onclick="startListeningQuiz()">
         <div class="game-icon">&#x1F3A4;</div>
         <div class="game-title">Listening Quiz</div>
-        <div class="game-desc">Ascolta e rispondi - Prossimamente!</div>
-        <div class="game-xp">Coming soon</div>
+        <div class="game-desc">Ascolta la frase e scegli la risposta corretta</div>
+        <div class="game-xp">+15 XP / risposta</div>
+      </div>
+      <div class="game-card" onclick="showPollSection()">
+        <div class="game-icon">&#x1F4CA;</div>
+        <div class="game-title">Sondaggi</div>
+        <div class="game-desc">Crea sondaggi o vota quelli della community</div>
+        <div class="game-xp">Comunita</div>
       </div>
     </div>
 
@@ -1878,6 +1882,300 @@ function quitGame(){
   const lvlSelect=document.querySelector('.games-level-select');
   if(gamesGrid)gamesGrid.style.display='';
   if(lvlSelect)lvlSelect.style.display='';
+}
+
+// ── LISTENING QUIZ (Web Speech API) ──
+var _listeningQuestions = {
+  A1:[
+    {audio:'Hello, how are you?',opts:['Come stai?','Dove sei?','Chi sei?','Cosa fai?'],correct:0},
+    {audio:'I have a red car.',opts:['Ho una macchina rossa','Ho un gatto rosso','Ho una casa rossa','Ho un libro rosso'],correct:0},
+    {audio:'The cat is on the table.',opts:['Il gatto e sul tavolo','Il gatto e sotto il tavolo','Il cane e sul tavolo','Il gatto e nella stanza'],correct:0},
+    {audio:'What is your name?',opts:['Come ti chiami?','Dove abiti?','Quanti anni hai?','Cosa mangi?'],correct:0},
+    {audio:'I like pizza and pasta.',opts:['Mi piacciono pizza e pasta','Mi piace il pesce','Non mi piace la pizza','Mangio sempre riso'],correct:0}
+  ],
+  A2:[
+    {audio:'She goes to school every morning.',opts:['Va a scuola ogni mattina','Va al lavoro ogni sera','Va al parco ogni mattina','Resta a casa ogni mattina'],correct:0},
+    {audio:'Can you help me find the station?',opts:['Puoi aiutarmi a trovare la stazione?','Puoi portarmi a casa?','Sai dove e il ristorante?','Puoi chiamare un taxi?'],correct:0},
+    {audio:'The weather is beautiful today.',opts:['Il tempo e bello oggi','Piove molto oggi','Fa freddo oggi','Nevica oggi'],correct:0},
+    {audio:'I would like a cup of tea, please.',opts:['Vorrei una tazza di te, per favore','Vorrei un caffe, per favore','Vorrei un bicchiere di acqua','Vorrei un panino, per favore'],correct:0},
+    {audio:'They are playing football in the park.',opts:['Stanno giocando a calcio nel parco','Stanno correndo nel parco','Stanno nuotando in piscina','Stanno studiando a casa'],correct:0}
+  ],
+  B1:[
+    {audio:'If I had more time, I would travel around the world.',opts:['Se avessi piu tempo, viaggerei per il mondo','Se avessi soldi, comprerei una casa','Se potessi, andrei al cinema','Se fossi ricco, non lavorerei'],correct:0},
+    {audio:'The meeting has been postponed until next Friday.',opts:['La riunione e stata rimandata a venerdi prossimo','La riunione e stata cancellata','La riunione e oggi pomeriggio','La riunione inizia subito'],correct:0},
+    {audio:'Despite the rain, we decided to go for a walk.',opts:['Nonostante la pioggia, abbiamo deciso di fare una passeggiata','A causa della pioggia siamo rimasti a casa','Abbiamo aspettato che smettesse di piovere','La pioggia ci ha impedito di uscire'],correct:0}
+  ],
+  B2:[
+    {audio:'Had I known about the delay, I would have taken an earlier flight.',opts:['Se avessi saputo del ritardo, avrei preso un volo precedente','Ho preso il volo in ritardo','Non sapevo del ritardo','Il volo e stato cancellato'],correct:0},
+    {audio:'The company is committed to reducing its carbon footprint by thirty percent.',opts:['L\'azienda si impegna a ridurre le emissioni del trenta per cento','L\'azienda ha aumentato la produzione','L\'azienda chiudera il prossimo anno','L\'azienda ha assunto trenta persone'],correct:0}
+  ]
+};
+
+async function startListeningQuiz(){
+  var level = getGameLevel();
+  var questions = _listeningQuestions[level] || _listeningQuestions.A1;
+  // Shuffle and take 5
+  var shuffled = questions.slice().sort(function(){return Math.random()-.5}).slice(0,5);
+  currentGame = {type:'listening', questions:shuffled, current:0, score:0, total:shuffled.length};
+  renderListeningQuestion();
+}
+
+function renderListeningQuestion(){
+  var g = currentGame;
+  if(!g || g.type !== 'listening') return;
+  if(g.current >= g.total){
+    finishListeningQuiz();
+    return;
+  }
+  var q = g.questions[g.current];
+  var arena = document.getElementById('game-arena');
+  document.querySelector('.games-grid').style.display='none';
+  document.querySelector('.games-level-select').style.display='none';
+  arena.style.display='block';
+  var optsH = '';
+  for(var i=0; i<q.opts.length; i++){
+    optsH += '<button class="quiz-opt" onclick="answerListening('+i+')" style="width:100%;text-align:left;padding:14px 18px;margin-bottom:8px;border:2px solid rgba(0,0,0,.08);border-radius:14px;background:#fff;font-family:var(--fb);font-size:.88rem;cursor:pointer;transition:all .2s">'+escHTML(q.opts[i])+'</button>';
+  }
+  arena.innerHTML = '<div class="game-active-card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+    + '<span style="font-weight:700;font-size:.82rem;color:var(--muted)">Domanda '+(g.current+1)+'/'+g.total+'</span>'
+    + '<button onclick="quitGame()" style="background:none;border:none;font-size:.9rem;cursor:pointer;color:var(--muted)">x</button></div>'
+    + '<div style="text-align:center;margin-bottom:20px">'
+    + '<button onclick="speakListening()" style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--teal),var(--blue));border:none;cursor:pointer;font-size:2rem;color:#fff;box-shadow:0 8px 20px rgba(78,205,196,.3);display:flex;align-items:center;justify-content:center;margin:0 auto">&#x1F50A;</button>'
+    + '<div style="font-size:.78rem;color:var(--muted);margin-top:8px">Tocca per ascoltare</div></div>'
+    + '<div style="font-weight:700;font-size:.88rem;margin-bottom:12px;color:var(--dark)">Cosa significa?</div>'
+    + optsH + '</div>';
+  // Auto-play
+  setTimeout(function(){speakListening();},400);
+}
+
+function speakListening(){
+  var g = currentGame;
+  if(!g || g.type !== 'listening') return;
+  var q = g.questions[g.current];
+  if('speechSynthesis' in window){
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(q.audio);
+    u.lang = 'en-US'; u.rate = 0.85; u.pitch = 1;
+    // Try to get a good English voice
+    var voices = window.speechSynthesis.getVoices();
+    var enVoice = voices.find(function(v){return v.lang.startsWith('en') && v.name.includes('Female');}) || voices.find(function(v){return v.lang.startsWith('en');});
+    if(enVoice) u.voice = enVoice;
+    window.speechSynthesis.speak(u);
+  } else {
+    toast('Il tuo browser non supporta la sintesi vocale','error');
+  }
+}
+
+function answerListening(idx){
+  var g = currentGame;
+  if(!g || g.type !== 'listening') return;
+  var q = g.questions[g.current];
+  var btns = document.querySelectorAll('.quiz-opt');
+  btns.forEach(function(b,i){
+    b.disabled = true;
+    if(i === q.correct) b.style.borderColor = '#34C759';
+    if(i === idx && idx !== q.correct) b.style.borderColor = '#FF3B30';
+  });
+  if(idx === q.correct) g.score++;
+  g.current++;
+  setTimeout(function(){renderListeningQuestion();},1200);
+}
+
+function finishListeningQuiz(){
+  var g = currentGame;
+  var pct = Math.round(g.score/g.total*100);
+  var xp = g.score * 15;
+  var arena = document.getElementById('game-arena');
+  arena.innerHTML = '<div class="game-active-card" style="text-align:center">'
+    + '<div style="font-size:3rem;margin-bottom:12px">'+(pct>=80?'&#x1F3C6;':pct>=50?'&#x1F44D;':'&#x1F4AA;')+'</div>'
+    + '<div style="font-family:var(--fh);font-size:1.3rem;margin-bottom:6px">'+g.score+'/'+g.total+' corrette!</div>'
+    + '<div style="font-size:.88rem;color:var(--muted);margin-bottom:16px">Hai guadagnato +'+xp+' XP</div>'
+    + '<button class="btn-primary" onclick="quitGame();startListeningQuiz()" style="width:100%">Gioca ancora</button>'
+    + '<button class="btn-secondary" onclick="quitGame()" style="width:100%;margin-top:8px">Torna ai giochi</button></div>';
+  if(ME && xp > 0){
+    ME.xp = (ME.xp||0) + xp;
+    POST('/api/games/word-scramble/check',{gameId:'listen',answers:[]}).catch(function(){});
+  }
+}
+
+// ── SONDAGGI / POLL ──
+async function showPollSection(){
+  var arena = document.getElementById('game-arena');
+  document.querySelector('.games-grid').style.display='none';
+  document.querySelector('.games-level-select').style.display='none';
+  arena.style.display='block';
+  arena.innerHTML = '<div class="spinner"></div>';
+  try{
+    var polls = await GET('/api/polls');
+    var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">';
+    h += '<div style="font-family:var(--fh);font-size:1.1rem">Sondaggi</div>';
+    h += '<div style="display:flex;gap:8px">';
+    h += '<button onclick="quitGame()" class="btn-secondary" style="padding:8px 14px;font-size:.78rem;border-radius:10px">Indietro</button>';
+    if(ME) h += '<button onclick="showCreatePoll()" class="btn-primary" style="padding:8px 14px;font-size:.78rem;border-radius:10px">+ Crea</button>';
+    h += '</div></div>';
+    if(!polls.length){
+      h += '<div class="empty-state"><h3>Nessun sondaggio</h3><p>Crea il primo sondaggio per la community!</p></div>';
+    }
+    for(var pi=0; pi<polls.length; pi++){
+      h += renderPollCard(polls[pi]);
+    }
+    arena.innerHTML = h;
+  }catch(e){toast(e.message,'error');quitGame();}
+}
+
+function renderPollCard(p){
+  var myVote = -1;
+  var totalV = 0;
+  for(var oi=0; oi<p.options.length; oi++){
+    totalV += p.options[oi].votes.length;
+    if(ME && p.options[oi].votes.indexOf(ME._id) !== -1) myVote = oi;
+  }
+  var h = '<div class="feed-post" style="margin-bottom:14px;padding:16px">';
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">';
+  h += '<div class="avatar-circle" style="width:32px;height:32px;background:'+pickColor(p.author?.username||'')+';font-size:.75rem">'+(p.author?.avatarUrl?'<img src="'+p.author.avatarUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':initials(p.author?.username||''))+'</div>';
+  h += '<div style="flex:1"><strong style="font-size:.82rem">'+escHTML(p.author?.username||'')+'</strong><span style="font-size:.7rem;color:var(--muted);margin-left:6px">'+timeAgo(p.createdAt)+'</span></div>';
+  if(ME && (p.authorId===ME._id || ME.role==='superadmin')) h += '<button onclick="deletePoll(\''+p._id+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem">&#x1F5D1;</button>';
+  h += '</div>';
+  h += '<div style="font-weight:700;font-size:.92rem;margin-bottom:12px;color:var(--dark)">'+escHTML(p.question)+'</div>';
+  for(var i=0; i<p.options.length; i++){
+    var pct = totalV > 0 ? Math.round(p.options[i].votes.length / totalV * 100) : 0;
+    var isMyVote = (i === myVote);
+    if(myVote >= 0){
+      // Show results
+      h += '<div style="position:relative;margin-bottom:6px;border-radius:10px;overflow:hidden;background:rgba(0,0,0,.04);padding:11px 14px">';
+      h += '<div style="position:absolute;top:0;left:0;height:100%;width:'+pct+'%;background:'+(isMyVote?'rgba(156,124,255,.2)':'rgba(0,0,0,.04)')+';border-radius:10px;transition:width .5s"></div>';
+      h += '<div style="position:relative;display:flex;justify-content:space-between;align-items:center">';
+      h += '<span style="font-size:.84rem;font-weight:'+(isMyVote?'700':'400')+'">'+(isMyVote?'&#x2713; ':'')+escHTML(p.options[i].text)+'</span>';
+      h += '<span style="font-size:.78rem;font-weight:700;color:var(--muted)">'+pct+'%</span>';
+      h += '</div></div>';
+    } else {
+      h += '<button onclick="votePoll(\''+p._id+'\','+i+')" style="width:100%;text-align:left;padding:11px 14px;margin-bottom:6px;border:2px solid rgba(0,0,0,.08);border-radius:10px;background:#fff;font-family:var(--fb);font-size:.84rem;cursor:pointer;transition:all .15s">';
+      h += escHTML(p.options[i].text)+'</button>';
+    }
+  }
+  h += '<div style="font-size:.72rem;color:var(--muted);margin-top:6px">'+totalV+' vot'+(totalV===1?'o':'i')+'</div>';
+  h += '</div>';
+  return h;
+}
+
+function showCreatePoll(){
+  var arena = document.getElementById('game-arena');
+  arena.innerHTML = '<div class="game-active-card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+    + '<div style="font-family:var(--fh);font-size:1.05rem">Crea sondaggio</div>'
+    + '<button onclick="showPollSection()" style="background:none;border:none;font-size:.9rem;cursor:pointer;color:var(--muted)">x</button></div>'
+    + '<input type="text" id="poll-question" placeholder="La tua domanda..." style="width:100%;border:2px solid rgba(0,0,0,.08);border-radius:12px;padding:12px 14px;font-family:var(--fb);font-size:.9rem;margin-bottom:12px;outline:none">'
+    + '<div id="poll-options">'
+    + '<input type="text" class="poll-opt-input" placeholder="Opzione 1" style="width:100%;border:2px solid rgba(0,0,0,.06);border-radius:10px;padding:10px 14px;font-family:var(--fb);font-size:.85rem;margin-bottom:6px;outline:none">'
+    + '<input type="text" class="poll-opt-input" placeholder="Opzione 2" style="width:100%;border:2px solid rgba(0,0,0,.06);border-radius:10px;padding:10px 14px;font-family:var(--fb);font-size:.85rem;margin-bottom:6px;outline:none">'
+    + '</div>'
+    + '<button onclick="addPollOption()" style="background:none;border:1px dashed rgba(0,0,0,.15);border-radius:10px;padding:8px;width:100%;font-size:.8rem;color:var(--muted);cursor:pointer;margin-bottom:14px">+ Aggiungi opzione</button>'
+    + '<button onclick="submitPoll()" class="btn-primary" style="width:100%;border-radius:12px;padding:13px">Pubblica sondaggio</button>'
+    + '</div>';
+}
+
+function addPollOption(){
+  var container = document.getElementById('poll-options');
+  if(!container) return;
+  var count = container.querySelectorAll('.poll-opt-input').length;
+  if(count >= 6){toast('Massimo 6 opzioni','error');return;}
+  var inp = document.createElement('input');
+  inp.type='text'; inp.className='poll-opt-input'; inp.placeholder='Opzione '+(count+1);
+  inp.style.cssText='width:100%;border:2px solid rgba(0,0,0,.06);border-radius:10px;padding:10px 14px;font-family:var(--fb);font-size:.85rem;margin-bottom:6px;outline:none';
+  container.appendChild(inp);
+}
+
+async function submitPoll(){
+  var q = document.getElementById('poll-question')?.value?.trim();
+  if(!q){toast('Scrivi una domanda','error');return;}
+  var inputs = document.querySelectorAll('.poll-opt-input');
+  var opts = [];
+  inputs.forEach(function(inp){var v=inp.value.trim();if(v)opts.push(v);});
+  if(opts.length < 2){toast('Servono almeno 2 opzioni','error');return;}
+  try{
+    await POST('/api/polls',{question:q,options:opts});
+    toast('Sondaggio pubblicato!');
+    showPollSection();
+  }catch(e){toast(e.message,'error');}
+}
+
+async function votePoll(pollId,optIdx){
+  try{
+    await POST('/api/polls/'+pollId+'/vote',{optionIndex:optIdx});
+    toast('Voto registrato!');
+    showPollSection();
+  }catch(e){toast(e.message,'error');}
+}
+
+async function deletePoll(pollId){
+  if(!confirm('Eliminare questo sondaggio?'))return;
+  try{
+    await DEL('/api/polls/'+pollId);
+    toast('Sondaggio eliminato');
+    showPollSection();
+  }catch(e){toast(e.message,'error');}
+}
+
+// ── HIGHLIGHTS STORIE ──
+async function loadHighlights(userId,container){
+  try{
+    var hls = await GET('/api/highlights/'+userId);
+    if(!hls.length) return;
+    var h = '<div style="margin-bottom:16px"><div style="font-weight:700;font-size:.88rem;margin-bottom:10px;display:flex;align-items:center;gap:6px"><span style="font-size:1rem">&#x2B50;</span> In evidenza</div>';
+    h += '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none">';
+    for(var i=0; i<hls.length; i++){
+      var hl = hls[i];
+      var cover = hl.coverUrl || '';
+      h += '<div onclick="viewHighlight(\''+hl._id+'\')" style="flex-shrink:0;text-align:center;cursor:pointer">';
+      h += '<div style="width:64px;height:64px;border-radius:50%;border:2px solid var(--purple);padding:2px;margin-bottom:4px">';
+      if(cover) h += '<img src="'+cover+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">';
+      else h += '<div style="width:100%;height:100%;border-radius:50%;background:linear-gradient(135deg,var(--purple),var(--coral));display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.2rem">&#x2B50;</div>';
+      h += '</div>';
+      h += '<div style="font-size:.68rem;font-weight:600;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHTML(hl.name)+'</div>';
+      h += '</div>';
+    }
+    // Add button if own profile
+    if(ME && userId === ME._id){
+      h += '<div onclick="createHighlight()" style="flex-shrink:0;text-align:center;cursor:pointer">';
+      h += '<div style="width:64px;height:64px;border-radius:50%;border:2px dashed rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;font-size:1.4rem;color:var(--muted);margin-bottom:4px">+</div>';
+      h += '<div style="font-size:.68rem;color:var(--muted)">Nuovo</div></div>';
+    }
+    h += '</div></div>';
+    if(container){
+      container.insertAdjacentHTML('afterbegin', h);
+    }
+  }catch(e){}
+}
+
+async function viewHighlight(hlId){
+  try{
+    var userId = ME?._id;
+    // Find the highlight among all loaded
+    var hls = await GET('/api/highlights/'+(userId||''));
+    var hl = hls.find(function(h){return h._id === hlId;});
+    if(!hl || !hl.stories?.length){toast('Nessun contenuto','error');return;}
+    // Show as story viewer
+    window._storyGroups = [{user:{username:ME?.username||'',avatar:ME?.avatar||'',avatarUrl:ME?.avatarUrl||''},items:hl.stories.map(function(s){return {_id:s._id||hlId,mediaUrl:s.mediaUrl||'',mediaType:s.mediaType||'image',bgTemplate:s.bgTemplate||'',caption:s.caption||'',userId:userId,duration:15,timestamp:Date.now()};})}];
+    window.currentStoryGroup = 0;
+    window.currentStoryIdx = 0;
+    if(typeof showStory === 'function') showStory();
+  }catch(e){toast(e.message,'error');}
+}
+
+async function createHighlight(){
+  // Load user's recent stories
+  try{
+    var stories = await GET('/api/stories');
+    var myStories = stories.filter(function(s){return s.userId === ME._id;});
+    if(!myStories.length){toast('Non hai storie da aggiungere. Crea prima una storia!','error');return;}
+    var name = prompt('Nome per la raccolta in evidenza:');
+    if(!name) return;
+    var storyIds = myStories.map(function(s){return s._id;});
+    await POST('/api/highlights',{name:name,storyIds:storyIds,coverUrl:myStories[0]?.mediaUrl||''});
+    toast('Raccolta creata!');
+    renderProfile();
+  }catch(e){toast(e.message,'error');}
 }
 
 /* ============================================================

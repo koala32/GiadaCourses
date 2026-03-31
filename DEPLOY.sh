@@ -127,11 +127,22 @@ cp "$TEMP_DIR/repo/migrate.js"      "$APP_DIR/" 2>/dev/null || true
 cp "$TEMP_DIR/repo/DEPLOY.sh"       "$APP_DIR/" 2>/dev/null || true
 cp "$TEMP_DIR/repo/BACKUP.sh"       "$APP_DIR/" 2>/dev/null || true
 cp "$TEMP_DIR/repo/ROLLBACK.sh"     "$APP_DIR/" 2>/dev/null || true
+cp "$TEMP_DIR/repo/BACKUP_FULL.sh"  "$APP_DIR/" 2>/dev/null || true
+cp "$TEMP_DIR/repo/UPDATE.sh"       "$APP_DIR/" 2>/dev/null || true
+cp "$TEMP_DIR/repo/INSTALL_COTURN.sh" "$APP_DIR/" 2>/dev/null || true
+# Copia qualsiasi .sh alla radice del repo
+for shfile in "$TEMP_DIR/repo/"*.sh; do
+  [ -f "$shfile" ] && cp "$shfile" "$APP_DIR/" 2>/dev/null || true
+done
+# Copia .env se presente nel repo (non sovrascrive se gia esiste)
+[ -f "$TEMP_DIR/repo/.env" ] && [ ! -f "$APP_DIR/.env" ] && cp "$TEMP_DIR/repo/.env" "$APP_DIR/" 2>/dev/null || true
 # Copia cartelle modulari
 cp -r "$TEMP_DIR/repo/routes"       "$APP_DIR/" 2>/dev/null || true
 cp -r "$TEMP_DIR/repo/lib"          "$APP_DIR/" 2>/dev/null || true
 cp -r "$TEMP_DIR/repo/middleware"    "$APP_DIR/" 2>/dev/null || true
 cp -r "$TEMP_DIR/repo/public"       "$APP_DIR/" 2>/dev/null || true
+# Copia icons se presenti
+[ -d "$TEMP_DIR/repo/icons" ] && cp -r "$TEMP_DIR/repo/icons" "$APP_DIR/" 2>/dev/null || true
 
 log "File di codice aggiornati"
 
@@ -169,9 +180,13 @@ log "Permessi OK"
 
 # ── STEP 9: Systemd service ───────────────────────────────────────────────
 info "9/10 Configurazione servizio..."
+# Load .env if exists for TURN credentials
+if [ -f "$APP_DIR/.env" ]; then
+  source "$APP_DIR/.env" 2>/dev/null || true
+fi
 cat > /etc/systemd/system/giadacourses.service << SVCEOF
 [Unit]
-Description=GiadaCourses v10.0 - Social English Learning (Modular Architecture)
+Description=GiadaCourses v10.6 - Social English Learning
 After=network.target
 
 [Service]
@@ -184,8 +199,9 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=$PORT
-Environment=TURN_SECRET=$TURN_SECRET
-Environment=SERVER_IP=$SERVER_IP
+Environment=TURN_SECRET=${TURN_SECRET}
+Environment=SERVER_IP=${SERVER_IP}
+EnvironmentFile=-$APP_DIR/.env
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=giadacourses

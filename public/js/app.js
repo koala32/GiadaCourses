@@ -18,13 +18,19 @@ function fmtDate(ts){return new Date(ts).toLocaleDateString('it-IT',{day:'2-digi
   document.addEventListener('touchstart',function(e){_ptrY=e.touches[0].clientY;},{passive:true});
   document.addEventListener('touchmove',function(e){
     var dy=e.touches[0].clientY-_ptrY;
-    if(dy>0 && window.scrollY<=0){
-      var el=e.target;var inScroll=false;
-      while(el&&el!==document.body&&el!==document.documentElement){
-        if(el.scrollTop>0){inScroll=true;break;}
-        el=el.parentElement;
+    if(dy>2){
+      // Blocca pull-down se il body o il scroll container sono in cima
+      var sc=document.getElementById('app-scroll');
+      var atTop=(sc?sc.scrollTop<=0:true)&&window.scrollY<=0&&document.documentElement.scrollTop<=0;
+      if(atTop){
+        var el=e.target;var inScroll=false;
+        while(el&&el!==document.body&&el!==document.documentElement){
+          if(el.id==='app-scroll'){break;}
+          if(el.scrollTop>0&&el.scrollHeight>el.clientHeight){inScroll=true;break;}
+          el=el.parentElement;
+        }
+        if(!inScroll)e.preventDefault();
       }
-      if(!inScroll)e.preventDefault();
     }
   },{passive:false});
 })();
@@ -88,7 +94,7 @@ function showPage(p){
   if(!pg)return;
   pg.classList.add('active');
   pg.scrollTop=0;
-  window.scrollTo(0,0);
+  var appScroll=document.getElementById('app-scroll');if(appScroll)appScroll.scrollTop=0;
   currentPage=p;
   const bn=document.querySelector(`.bnav-item[data-p="${p}"]`);
   if(bn){bn.classList.add('active');bn.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}
@@ -641,7 +647,7 @@ function renderReelCard(p){
     + '<button class="action-btn'+(liked?' liked':'')+'" id="like-btn-'+p._id+'" onclick="likePost(\''+p._id+'\',this)"><span class="like-icon">'+(liked?'\u2764\ufe0f':'\u{1f90d}')+'</span> '+lcount+'</button>'
     + '<button class="action-btn" onclick="toggleComments(\''+p._id+'\')">\u{1f4ac} <span id="ccount-'+p._id+'">0</span></button>'
     + '</div>'
-    + (p.text?'<div class="post-body" style="font-size:.86rem">'+escHTML(p.text)+'</div>':'')
+    + (p.text?'<div class="post-body" style="font-size:.86rem">'+renderMentions(escHTML(p.text))+'</div>':'')
     + '<div class="comments-box" id="cmts-'+p._id+'"><div id="cmts-list-'+p._id+'"></div>'
     + (ME?'<div class="comment-input-row"><input class="comment-input" id="ci-'+p._id+'" data-pid="'+p._id+'" placeholder="Commenta..." onkeydown="handleCommentKey(event,this)"><button class="comment-send" onclick="addComment(\''+p._id+'\')">\u27a4</button></div>':'')
     + '</div></div></div>';
@@ -839,7 +845,7 @@ function renderPostHTML(p,compact=false){
       </div>
       ${canDel?`<button onclick="deletePost('${p._id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px;flex-shrink:0">🗑️</button>`:''}
     </div>
-    ${p.text?`<div class="post-body">${escHTML(p.text)}</div>`:''}
+    ${p.text?`<div class="post-body">${renderMentions(escHTML(p.text))}</div>`:''}
     ${(p.mediaUrl&&typeof p.mediaUrl==='string'&&p.mediaUrl.startsWith('/'))?`<div class="media-in-post">${p.mediaType==='video'
       ?`<video src="${p.mediaUrl}" controls playsinline preload="none" onclick="event.stopPropagation()" style="width:100%;max-height:480px;display:block;background:#000;border-radius:var(--rs)"></video>`
       :`<img src="${p.mediaUrl}" alt="" onclick="openLightbox('${p.mediaUrl}')" loading="lazy" onerror="this.style.display='none'">`
@@ -866,7 +872,7 @@ async function loadPostComments(pid){
       const ca=c.author||{username:'?',avatar:'👤'};
       return `<div class="comment-item">
         <div class="avatar-circle" style="width:30px;height:30px;background:${pickColor(ca.username)};font-size:.75rem;cursor:pointer" onclick="viewUser('${ca._id}')">${ca.avatar||initials(ca.username)}</div>
-        <div class="comment-bubble"><strong>${escHTML(ca.username)}</strong>${escHTML(c.text)}</div>
+        <div class="comment-bubble"><strong>${escHTML(ca.username)}</strong>${renderMentions(escHTML(c.text))}</div>
       </div>`;
     }).join('');
   }catch{}
@@ -5186,6 +5192,13 @@ function startSSE(){
   onEvent('new_exercise', d => {
     toast(`📚 Nuovo esercizio: "${d.title}" (${d.level})`,'info',3500);
   }, false);
+
+  // ── @Mention notification ──
+  onEvent('mention', d => {
+    toast('@'+escHTML(d.from)+' ti ha menzionato in un commento','info',4000);
+    try{if(navigator.vibrate)navigator.vibrate([100,50,100]);}catch{}
+    showPushNotif('Menzione da @'+d.from, d.text||'Ti ha menzionato in un commento');
+  }, false);
 }
 
 function stopSSE(){
@@ -5407,6 +5420,13 @@ window.addEventListener('error',e=>{
 
 function escHTML(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function escAttr(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function renderMentions(html){return html.replace(/@(\w+)/g,'<span style="color:var(--purple);font-weight:700;cursor:pointer" onclick="searchAndViewUser(\'$1\')">@$1</span>');}
+function searchAndViewUser(username){
+  GET('/api/users/search?q='+encodeURIComponent(username)).then(function(users){
+    if(users&&users.length) viewUser(users[0]._id);
+    else toast('Utente non trovato','error');
+  }).catch(function(){});
+}
 
 // Close modals on outside click
 document.addEventListener('click',e=>{

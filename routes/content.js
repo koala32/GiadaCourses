@@ -252,7 +252,28 @@ module.exports = function(app) {
     if (!text?.trim()) return res.status(400).json({ error: 'Testo mancante' });
     const comment = await db.comments.insertAsync({ postId: req.params.id, userId: req.user._id, text: text.trim(), timestamp: Date.now() });
     const { passwordHash, ...auth } = req.user;
+    // Parse @mentions and notify
+    const mentions = (text.match(/@(\w+)/g) || []).map(m => m.slice(1).toLowerCase());
+    if (mentions.length) {
+      const users = await db.users.findAsync({});
+      for (const m of mentions) {
+        const target = users.find(u => u.username.toLowerCase() === m);
+        if (target && target._id !== req.user._id) {
+          sseEmit(target._id, 'mention', { from: auth.username, postId: req.params.id, text: text.trim().slice(0, 80) });
+        }
+      }
+    }
     res.json({ ...comment, author: { _id: auth._id, username: auth.username, avatar: auth.avatar } });
+  });
+
+  // ── User search for @mention autocomplete ──
+  app.get('/api/users/search', requireAuth, async (req, res) => {
+    const q = (req.query.q || '').trim().toLowerCase();
+    if (!q || q.length < 1) return res.json([]);
+    const users = await db.users.findAsync({ banned: false });
+    const results = users.filter(u => u.username.toLowerCase().includes(q) && u._id !== req.user._id)
+      .slice(0, 8).map(({ passwordHash, ip, email, ...u }) => ({ _id: u._id, username: u.username, avatar: u.avatar, avatarUrl: u.avatarUrl }));
+    res.json(results);
   });
 
   // ── BLOG ──

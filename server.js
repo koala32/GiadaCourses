@@ -10,6 +10,18 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { Server: SocketIO } = require('socket.io');
 
+// ── Load .env file if exists ──
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    fs.readFileSync(envPath, 'utf-8').split('\n').forEach(line => {
+      const [key, ...val] = line.split('=');
+      if (key && key.trim() && !key.startsWith('#')) process.env[key.trim()] = val.join('=').trim();
+    });
+    console.log('[ENV] Loaded .env file');
+  }
+} catch (e) { console.warn('[ENV] Could not load .env:', e.message); }
+
 // ── Moduli interni ──
 const { db, DB_DIR } = require('./lib/db');
 const { sseClients, ioClients, ssePending, sseEmit, sseBroadcast, setIO } = require('./lib/sse');

@@ -356,8 +356,8 @@ else
   nginx -t 2>&1
 fi
 
-# Auto-ripristino SSL se era già presente
-if [ "$HAS_SSL" = true ] && [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+# Auto-ripristino SSL — FORZA certbot se certificato esiste
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
   info "Ri-applico certificato SSL con Certbot..."
   certbot --nginx -d "$DOMAIN" --redirect --non-interactive --agree-tos \
     --email "admin@giadacourses.it" --no-eff-email 2>&1 \

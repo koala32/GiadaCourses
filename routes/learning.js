@@ -259,10 +259,10 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
-      { version: '10.6', date: '2026-03-31', title: 'Sondaggi, Listening Quiz e Storie in Evidenza', changes: ['Nuovo gioco Listening Quiz con sintesi vocale','Sondaggi della community: crea e vota','Storie in evidenza sul profilo','Navigazione senza refresh accidentali','Connessione in tempo reale migliorata','Riconnessione automatica app in primo piano'] },
-      { version: '10.4', date: '2026-03-27', title: 'Nuova Esperienza Social', changes: ['Feed diviso in Thread, Reels ed Esercizi','Reels con foto e video multipli','Recensioni esercizi con stelle e commenti','Storie completamente ridisegnate','Chiamate e sfide tra utenti migliorate','Reset password sicuro per gli utenti','Protezione avanzata su tutti i dispositivi'] },
-      { version: '10.1', date: '2026-03-26', title: 'Personalizzazione e Sicurezza', changes: ['Modalita scura nel profilo','Navigazione migliorata per mobile','Correzione errori nel pannello admin','Protezione dati rafforzata','Durata storie personalizzabile 3-15 secondi','Sfondi storie rinnovati'] },
-      { version: '10.0', date: '2026-03-25', title: 'Nuova Architettura', changes: ['App completamente ristrutturata','Gruppi di chat','Modalita scura','Giochi nuovi','Chiamate migliorate con suoneria','Notifiche messaggi','Storie con durata personalizzabile'] },
+      { version: '10.7', date: '2026-04-01', title: 'Stabilita e Correzioni', changes: ['Layout corretto su tutte le pagine','Dirette LIVE: annullamento corretto','Storie: una sola canzone alla volta','Guida installazione migliorata per iPhone e Android','Navigazione piu fluida e stabile','Protezione aggiornata contro refresh accidentale'] },
+      { version: '10.6', date: '2026-03-31', title: 'Nuove Funzionalita', changes: ['Storie in evidenza sul profilo','Menzioni @utente nei commenti','Connessione in tempo reale migliorata','Riconnessione automatica quando torni nell\'app','Nuovi giochi in arrivo'] },
+      { version: '10.4', date: '2026-03-27', title: 'Nuova Esperienza Social', changes: ['Feed diviso in Thread, Reels ed Esercizi','Reels con foto e video multipli','Recensioni esercizi con stelle e commenti','Storie completamente ridisegnate','Chiamate e sfide tra utenti migliorate','Protezione avanzata su tutti i dispositivi'] },
+      { version: '10.1', date: '2026-03-26', title: 'Personalizzazione e Sicurezza', changes: ['Modalita scura nel profilo','Navigazione migliorata per mobile','Protezione dati rafforzata','Durata storie personalizzabile 3-15 secondi','Sfondi storie rinnovati'] },
     ]);
   });
 

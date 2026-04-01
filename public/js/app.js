@@ -1622,8 +1622,6 @@ async function renderGames(){
         <div class="game-xp">In arrivo</div>
       </div>
     </div>
-    ${ME&&(ME.role==='admin'||ME.role==='superadmin')?'<div style="margin-top:16px"><button onclick="showPollSection()" class="btn-primary" style="width:100%;border-radius:14px;padding:14px">Crea Sondaggio (Admin)</button></div>':''}
-    </div>
 
     <div id="game-arena" style="display:none"></div>
   `;

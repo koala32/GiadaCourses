@@ -12,23 +12,6 @@ function initials(name){return(name||'?').split(/[\s_]+/).map(w=>w[0]||'').join(
 function timeAgo(ts){const d=Date.now()-ts;if(d<60e3)return 'adesso';if(d<3600e3)return Math.floor(d/60e3)+'m fa';if(d<86400e3)return Math.floor(d/3600e3)+'h fa';return Math.floor(d/86400e3)+'g fa';}
 function fmtDate(ts){return new Date(ts).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'});}
 
-/* ── BLOCCA PULL-TO-REFRESH NATIVO (definitivo) ── */
-(function(){
-  var _ptrY=0;
-  document.addEventListener('touchstart',function(e){_ptrY=e.touches[0].clientY;},{passive:true});
-  document.addEventListener('touchmove',function(e){
-    var dy=e.touches[0].clientY-_ptrY;
-    if(dy>2 && window.scrollY<=0 && document.documentElement.scrollTop<=0){
-      var el=e.target;var inScroll=false;
-      while(el&&el!==document.body&&el!==document.documentElement){
-        if(el.scrollTop>0&&el.scrollHeight>el.clientHeight){inScroll=true;break;}
-        el=el.parentElement;
-      }
-      if(!inScroll)e.preventDefault();
-    }
-  },{passive:false});
-})();
-
 /* ============================================================
    API HELPER
 ============================================================ */
@@ -88,7 +71,7 @@ function showPage(p){
   if(!pg)return;
   pg.classList.add('active');
   pg.scrollTop=0;
-  window.scrollTo(0,0);
+  var wrap=document.getElementById('app-wrap');if(wrap)wrap.scrollTop=0;
   currentPage=p;
   const bn=document.querySelector(`.bnav-item[data-p="${p}"]`);
   if(bn){bn.classList.add('active');bn.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}

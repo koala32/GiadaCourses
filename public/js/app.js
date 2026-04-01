@@ -71,7 +71,7 @@ function showPage(p){
   if(!pg)return;
   pg.classList.add('active');
   pg.scrollTop=0;
-  var wrap=document.getElementById('app-wrap');if(wrap)wrap.scrollTop=0;
+  window.scrollTo(0,0);
   currentPage=p;
   const bn=document.querySelector(`.bnav-item[data-p="${p}"]`);
   if(bn){bn.classList.add('active');bn.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}
@@ -3070,17 +3070,74 @@ function handleStoryMedia(input,type){
     const ph=document.getElementById('sc-placeholder');if(ph)ph.style.display='none';
     preview.querySelector('.sc-template-overlay')?.remove();
     preview.style.background='#000';
-    preview.querySelectorAll('img,video').forEach(e=>e.remove());
+    preview.querySelectorAll('img,video,.sc-media-wrap').forEach(e=>e.remove());
     if(type==='video'){
       const v=document.createElement('video');
       v.src=url; v.autoplay=true; v.loop=true; v.muted=true; v.playsInline=true;
-      v.style.cssText='width:100%;height:100%;object-fit:contain;position:absolute;inset:0';
+      v.style.cssText='width:100%;height:100%;object-fit:cover;position:absolute;inset:0';
       preview.insertAdjacentElement('afterbegin',v);
     } else {
-      const img=document.createElement('img');
+      // Wrap image in a transformable container for pinch-zoom + drag
+      var wrap=document.createElement('div');
+      wrap.className='sc-media-wrap';
+      wrap.style.cssText='position:absolute;inset:0;overflow:hidden;touch-action:none';
+      var img=document.createElement('img');
       img.src=url;
-      img.style.cssText='width:100%;height:100%;object-fit:contain;position:absolute;inset:0;touch-action:pinch-zoom';
-      preview.insertAdjacentElement('afterbegin',img);
+      img.style.cssText='width:100%;height:100%;object-fit:cover;transform-origin:center center;will-change:transform;pointer-events:none;user-select:none;-webkit-user-drag:none';
+      img.draggable=false;
+      wrap.appendChild(img);
+      preview.insertAdjacentElement('afterbegin',wrap);
+      // Hint
+      var hint=document.createElement('div');
+      hint.style.cssText='position:absolute;bottom:8px;left:0;right:0;text-align:center;color:rgba(255,255,255,.5);font-size:.7rem;z-index:3;pointer-events:none';
+      hint.textContent='Pizzica per ingrandire, trascina per spostare';
+      hint.id='sc-media-hint';
+      wrap.appendChild(hint);
+      setTimeout(function(){var h=document.getElementById('sc-media-hint');if(h)h.style.display='none';},4000);
+      // Gesture state
+      var _s={scale:1,tx:0,ty:0,lastDist:0,lastX:0,lastY:0,fingers:0};
+      function applyT(){img.style.transform='translate('+_s.tx+'px,'+_s.ty+'px) scale('+_s.scale+')';}
+      wrap.addEventListener('touchstart',function(e){
+        _s.fingers=e.touches.length;
+        if(e.touches.length===2){
+          _s.lastDist=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
+        } else if(e.touches.length===1){
+          _s.lastX=e.touches[0].clientX;_s.lastY=e.touches[0].clientY;
+        }
+      },{passive:true});
+      wrap.addEventListener('touchmove',function(e){
+        e.preventDefault();
+        if(e.touches.length===2){
+          // Pinch zoom
+          var dist=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
+          if(_s.lastDist>0){
+            var ds=dist/_s.lastDist;
+            _s.scale=Math.max(0.5,Math.min(5,_s.scale*ds));
+          }
+          _s.lastDist=dist;
+          applyT();
+        } else if(e.touches.length===1 && _s.scale>1){
+          // Drag (only when zoomed in)
+          var dx=e.touches[0].clientX-_s.lastX;
+          var dy=e.touches[0].clientY-_s.lastY;
+          _s.tx+=dx;_s.ty+=dy;
+          _s.lastX=e.touches[0].clientX;_s.lastY=e.touches[0].clientY;
+          applyT();
+        }
+      },{passive:false});
+      wrap.addEventListener('touchend',function(e){
+        _s.fingers=e.touches.length;
+        _s.lastDist=0;
+        if(e.touches.length===1){_s.lastX=e.touches[0].clientX;_s.lastY=e.touches[0].clientY;}
+      },{passive:true});
+      // Double tap to reset
+      var _lastTap=0;
+      wrap.addEventListener('touchend',function(e){
+        if(e.touches.length>0)return;
+        var now=Date.now();
+        if(now-_lastTap<300){_s.scale=1;_s.tx=0;_s.ty=0;applyT();}
+        _lastTap=now;
+      },{passive:true});
     }
     _showStoryOptsBtn();
   };

@@ -1,0 +1,22 @@
+{
+  "name": "helpy",
+  "version": "1.0.0",
+  "description": "Helpy — Assistenza informatica per tutti",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "better-sqlite3": "^11.6.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^7.4.1",
+    "cookie-parser": "^1.4.7",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^10.0.0",
+    "dotenv": "^16.4.5"
+  }
+}

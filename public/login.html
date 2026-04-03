@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accedi — Helpy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💙</text></svg>">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/guard.js" defer></script>
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card">
+      <a href="/" class="nav-logo">💙 Helpy</a>
+      <h2>Bentornato!</h2>
+      <p class="subtitle">Accedi al tuo account per continuare</p>
+
+      <div class="alert alert-error" id="errorAlert"></div>
+      <div class="alert alert-success" id="successAlert"></div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="username">Username o Email</label>
+          <input type="text" id="username" class="form-input" placeholder="Il tuo username o email" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" class="form-input" placeholder="La tua password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn">Accedi</button>
+      </form>
+
+      <div class="auth-footer">
+        Non hai un account? <a href="/register">Registrati gratis</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Redirect se già loggato
+    fetch('/api/auth/me').then(r => { if (r.ok) return r.json(); throw ''; })
+      .then(u => { window.location.href = (u.role === 'superadmin' || u.role === 'admin') ? '/admin' : '/app'; })
+      .catch(() => {});
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const errEl = document.getElementById('errorAlert');
+      const sucEl = document.getElementById('successAlert');
+      errEl.classList.remove('show');
+      sucEl.classList.remove('show');
+      btn.disabled = true;
+      btn.textContent = 'Accesso in corso...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('username').value.trim(),
+            password: document.getElementById('password').value,
+          })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          // Mostra errore specifico
+          let msg = data.error || 'Errore durante il login';
+          if (data.notFound) {
+            msg += ' <a href="/register" style="color:var(--primary);font-weight:600;">Crea un account →</a>';
+          }
+          errEl.innerHTML = msg;
+          errEl.classList.add('show');
+          btn.disabled = false;
+          btn.textContent = 'Accedi';
+          return;
+        }
+
+        sucEl.textContent = 'Accesso effettuato! Reindirizzamento...';
+        sucEl.classList.add('show');
+        setTimeout(() => {
+          if (data.user.role === 'superadmin' || data.user.role === 'admin') {
+            window.location.href = '/admin';
+          } else {
+            window.location.href = '/app';
+          }
+        }, 500);
+      } catch (err) {
+        errEl.textContent = 'Errore di connessione. Verifica la tua rete e riprova.';
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'Accedi';
+      }
+    }
+  </script>
+</body>
+</html>

@@ -6,6 +6,7 @@
   <title>Accedi — Helpy</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💙</text></svg>">
   <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/guard.js" defer></script>
 </head>
 <body>
   <div class="auth-page">
@@ -15,6 +16,7 @@
       <p class="subtitle">Accedi al tuo account per continuare</p>
 
       <div class="alert alert-error" id="errorAlert"></div>
+      <div class="alert alert-success" id="successAlert"></div>
 
       <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="form-group">
@@ -35,11 +37,18 @@
   </div>
 
   <script>
+    // Redirect se già loggato
+    fetch('/api/auth/me').then(r => { if (r.ok) return r.json(); throw ''; })
+      .then(u => { window.location.href = (u.role === 'superadmin' || u.role === 'admin') ? '/admin' : '/app'; })
+      .catch(() => {});
+
     async function handleLogin(e) {
       e.preventDefault();
       const btn = document.getElementById('loginBtn');
-      const alert = document.getElementById('errorAlert');
-      alert.classList.remove('show');
+      const errEl = document.getElementById('errorAlert');
+      const sucEl = document.getElementById('successAlert');
+      errEl.classList.remove('show');
+      sucEl.classList.remove('show');
       btn.disabled = true;
       btn.textContent = 'Accesso in corso...';
 
@@ -53,16 +62,32 @@
           })
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        // Redirect based on role
-        if (data.user.role === 'superadmin' || data.user.role === 'admin') {
-          window.location.href = '/admin';
-        } else {
-          window.location.href = '/app';
+
+        if (!res.ok) {
+          // Mostra errore specifico
+          let msg = data.error || 'Errore durante il login';
+          if (data.notFound) {
+            msg += ' <a href="/register" style="color:var(--primary);font-weight:600;">Crea un account →</a>';
+          }
+          errEl.innerHTML = msg;
+          errEl.classList.add('show');
+          btn.disabled = false;
+          btn.textContent = 'Accedi';
+          return;
         }
+
+        sucEl.textContent = 'Accesso effettuato! Reindirizzamento...';
+        sucEl.classList.add('show');
+        setTimeout(() => {
+          if (data.user.role === 'superadmin' || data.user.role === 'admin') {
+            window.location.href = '/admin';
+          } else {
+            window.location.href = '/app';
+          }
+        }, 500);
       } catch (err) {
-        alert.textContent = err.message;
-        alert.classList.add('show');
+        errEl.textContent = 'Errore di connessione. Verifica la tua rete e riprova.';
+        errEl.classList.add('show');
         btn.disabled = false;
         btn.textContent = 'Accedi';
       }

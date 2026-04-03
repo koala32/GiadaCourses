@@ -11,6 +11,9 @@ const helmet = require('helmet');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// ── Trust proxy (Nginx) — ESSENZIALE per cookie secure dietro HTTPS ──
+app.set('trust proxy', 1);
+
 // ── Database ────────────────────────────────────────────────
 const db = require('./database/init');
 

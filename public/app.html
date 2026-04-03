@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Helpy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💙</text></svg>">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container" style="max-width:100%;padding:0 20px;">
+      <div class="flex items-center gap-2">
+        <button class="mobile-menu" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
+        <a href="/app" class="nav-logo">💙 Helpy</a>
+      </div>
+      <div class="nav-user" id="navUser" onclick="navigate('profilo')">
+        <div class="nav-avatar" id="navAvatar">?</div>
+        <span id="navName" style="font-size:0.88rem;font-weight:500;">Caricamento...</span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Menu</div>
+        <button class="sidebar-link active" data-page="dashboard" onclick="navigate('dashboard')">
+          <span class="icon">🏠</span> Dashboard
+        </button>
+        <button class="sidebar-link" data-page="percorsi" onclick="navigate('percorsi')">
+          <span class="icon">📚</span> Percorsi
+        </button>
+        <button class="sidebar-link" data-page="assistenza" onclick="navigate('assistenza')">
+          <span class="icon">💬</span> Assistenza
+          <span class="badge badge-danger hidden" id="ticketBadge">0</span>
+        </button>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Account</div>
+        <button class="sidebar-link" data-page="profilo" onclick="navigate('profilo')">
+          <span class="icon">👤</span> Profilo
+        </button>
+        <button class="sidebar-link" onclick="logout()" style="color:var(--danger);">
+          <span class="icon">🚪</span> Esci
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content" id="mainContent">
+      <div class="loading-screen" id="loadingScreen">
+        <div class="spinner"></div>
+        <p style="color:var(--text-muted);">Caricamento...</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- New Ticket Modal -->
+  <div class="modal-overlay" id="newTicketModal">
+    <div class="modal">
+      <h3>💬 Nuova richiesta di assistenza</h3>
+      <form onsubmit="createTicket(event)">
+        <div class="form-group">
+          <label>Di cosa hai bisogno?</label>
+          <input type="text" id="ticketSubject" class="form-input" placeholder="Es. Il computer è molto lento" required maxlength="200">
+        </div>
+        <div class="form-group">
+          <label>Categoria</label>
+          <select id="ticketCategory" class="form-input">
+            <option value="generale">Generale</option>
+            <option value="hardware">Hardware (schermo, tastiera, ecc.)</option>
+            <option value="software">Software (programmi, app)</option>
+            <option value="rete">Rete / Internet / WiFi</option>
+            <option value="sicurezza">Sicurezza / Privacy</option>
+            <option value="altro">Altro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Descrivi il problema</label>
+          <textarea id="ticketMessage" class="form-input" placeholder="Spiega cosa succede, cosa hai provato a fare e cosa vorresti ottenere..." required maxlength="5000"></textarea>
+        </div>
+        <div class="flex gap-1" style="justify-content:flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('newTicketModal')">Annulla</button>
+          <button type="submit" class="btn btn-primary" id="createTicketBtn">Invia richiesta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ═══ STATE ═══
+    let currentUser = null;
+    let currentPage = 'dashboard';
+
+    // ═══ AUTH CHECK ═══
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) throw new Error();
+        currentUser = await res.json();
+        document.getElementById('navAvatar').textContent = currentUser.display_name[0].toUpperCase();
+        document.getElementById('navName').textContent = currentUser.display_name;
+        navigate('dashboard');
+      } catch {
+        window.location.href = '/login';
+      }
+    }
+
+    // ═══ NAVIGATION ═══
+    function navigate(page) {
+      currentPage = page;
+      document.querySelectorAll('.sidebar-link[data-page]').forEach(l => {
+        l.classList.toggle('active', l.dataset.page === page);
+      });
+      document.querySelector('.sidebar')?.classList.remove('open');
+      const main = document.getElementById('mainContent');
+      main.innerHTML = '<div class="loading-screen"><div class="spinner"></div></div>';
+      
+      switch(page) {
+        case 'dashboard': renderDashboard(); break;
+        case 'percorsi': renderCourses(); break;
+        case 'assistenza': renderTickets(); break;
+        case 'profilo': renderProfile(); break;
+        default:
+          if (page.startsWith('corso-')) renderCourseDetail(page.replace('corso-', ''));
+          else if (page.startsWith('lezione-')) renderLesson(page.replace('lezione-', ''));
+          else if (page.startsWith('ticket-')) renderTicketDetail(page.replace('ticket-', ''));
+          else renderDashboard();
+      }
+    }
+
+    // ═══ DASHBOARD ═══
+    async function renderDashboard() {
+      const main = document.getElementById('mainContent');
+      main.innerHTML = `
+        <h2 style="margin-bottom:4px;">Ciao, ${currentUser.display_name}! 👋</h2>
+        <p style="margin-bottom:32px;">Ecco un riepilogo del tuo percorso</p>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon" style="background:var(--primary-bg);">📚</div>
+            <div><div class="stat-value">${currentUser.stats.lessonsCompleted}</div><div class="stat-label">Lezioni completate</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:var(--secondary-bg);">💬</div>
+            <div><div class="stat-value">${currentUser.stats.tickets}</div><div class="stat-label">Richieste assistenza</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background:var(--accent-bg);">🏅</div>
+            <div><div class="stat-value">${currentUser.login_count || 0}</div><div class="stat-label">Accessi totali</div></div>
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:24px;">
+          <div>
+            <h3 style="margin-bottom:16px;">🚀 Azioni rapide</h3>
+            <div class="flex flex-col gap-1">
+              <button class="btn btn-primary btn-block" onclick="navigate('percorsi')" style="justify-content:flex-start;">📚 Continua a imparare</button>
+              <button class="btn btn-secondary btn-block" onclick="openModal('newTicketModal')" style="justify-content:flex-start;">💬 Chiedi assistenza</button>
+              <button class="btn btn-secondary btn-block" onclick="navigate('assistenza')" style="justify-content:flex-start;">📋 Le mie richieste</button>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:16px;">💡 Lo sapevi che...</h3>
+            <div class="card" style="background:var(--primary-bg);border-color:rgba(37,99,235,0.15);">
+              <p style="color:var(--primary-dark);font-size:0.92rem;" id="dailyTip">Caricamento...</p>
+            </div>
+          </div>
+        </div>
+      `;
+      // Daily tip
+      const tips = [
+        'Puoi usare Ctrl+Z per annullare l\'ultima azione in quasi tutti i programmi!',
+        'Cambia la password regolarmente e non usare mai la stessa per più siti.',
+        'Se il PC è lento, prova a riavviarlo. Risolve più problemi di quanto pensi!',
+        'Non aprire mai allegati email da mittenti che non conosci.',
+        'Ctrl+C copia, Ctrl+V incolla, Ctrl+X taglia — le scorciatoie più utili!',
+        'Fai sempre un backup dei file importanti su una chiavetta USB o su Google Drive.',
+        'Se un sito ti chiede la carta di credito per qualcosa di "gratuito", probabilmente è una truffa.',
+      ];
+      document.getElementById('dailyTip').textContent = tips[Math.floor(Math.random() * tips.length)];
+    }
+
+    // ═══ COURSES ═══
+    async function renderCourses() {
+      const main = document.getElementById('mainContent');
+      try {
+        const res = await fetch('/api/learn/courses');
+        const courses = await res.json();
+        main.innerHTML = `
+          <h2 style="margin-bottom:4px;">📚 Percorsi di apprendimento</h2>
+          <p style="margin-bottom:32px;">Scegli un percorso e impara al tuo ritmo</p>
+          <div class="course-grid">
+            ${courses.map(c => `
+              <div class="card card-hover course-card" onclick="navigate('corso-${c.id}')">
+                <div class="card-header">
+                  <div class="card-icon" style="background:var(--primary-bg);font-size:2rem;">${c.icon}</div>
+                  <div>
+                    <h3>${c.title}</h3>
+                    <span class="badge badge-${c.difficulty === 'base' ? 'success' : 'warning'}">${c.difficulty}</span>
+                  </div>
+                </div>
+                <p style="font-size:0.9rem;">${c.description}</p>
+                <div class="course-progress">
+                  <div class="progress-bar"><div class="progress-fill" style="width:${c.progress || 0}%"></div></div>
+                  <div class="progress-text">${c.completedLessons || 0}/${c.lesson_count} lezioni completate (${c.progress || 0}%)</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch { main.innerHTML = '<p>Errore nel caricamento dei corsi</p>'; }
+    }
+
+    // ═══ COURSE DETAIL ═══
+    async function renderCourseDetail(id) {
+      const main = document.getElementById('mainContent');
+      try {
+        const res = await fetch(`/api/learn/courses/${id}`);
+        const course = await res.json();
+        main.innerHTML = `
+          <button class="btn btn-ghost btn-sm mb-3" onclick="navigate('percorsi')">← Torna ai percorsi</button>
+          <div class="flex items-center gap-2 mb-2">
+            <span style="font-size:2rem;">${course.icon}</span>
+            <div>
+              <h2>${course.title}</h2>
+              <p>${course.description}</p>
+            </div>
+          </div>
+          <div class="mt-3">
+            <h3 style="margin-bottom:16px;">Lezioni</h3>
+            <div class="flex flex-col gap-1">
+              ${course.lessons.map((l, i) => {
+                const done = l.progress?.completed;
+                const typeIcon = l.type === 'quiz' ? '❓' : l.type === 'minigioco' ? '🎮' : '📖';
+                return `
+                  <div class="card card-hover" onclick="navigate('lezione-${l.id}')" style="cursor:pointer;padding:16px 20px;">
+                    <div class="flex items-center gap-2" style="justify-content:space-between;">
+                      <div class="flex items-center gap-2">
+                        <span style="font-size:1.2rem;">${typeIcon}</span>
+                        <div>
+                          <strong>${i + 1}. ${l.title}</strong>
+                          <div style="font-size:0.78rem;color:var(--text-muted);text-transform:capitalize;">${l.type}</div>
+                        </div>
+                      </div>
+                      ${done ? '<span class="badge badge-success">✓ Completata</span>' : '<span class="badge badge-muted">Da fare</span>'}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } catch { main.innerHTML = '<p>Errore nel caricamento del corso</p>'; }
+    }
+
+    // ═══ LESSON ═══
+    async function renderLesson(id) {
+      const main = document.getElementById('mainContent');
+      try {
+        const res = await fetch(`/api/learn/lessons/${id}`);
+        const lesson = await res.json();
+
+        if (lesson.type === 'quiz' && lesson.quizData) {
+          renderQuiz(lesson);
+        } else {
+          main.innerHTML = `
+            <button class="btn btn-ghost btn-sm mb-3" onclick="navigate('corso-${lesson.course_id}')">← Torna al corso</button>
+            <div class="lesson-content">${lesson.content}</div>
+            <div class="mt-4">
+              ${lesson.progress?.completed
+                ? '<div class="alert alert-success show">✓ Hai già completato questa lezione</div>'
+                : `<button class="btn btn-success btn-lg" onclick="completeLesson('${id}')">✅ Ho capito! Segna come completata</button>`
+              }
+            </div>
+          `;
+        }
+      } catch { main.innerHTML = '<p>Errore nel caricamento della lezione</p>'; }
+    }
+
+    function renderQuiz(lesson) {
+      const main = document.getElementById('mainContent');
+      const quiz = lesson.quizData;
+      let currentQ = 0, score = 0, answered = false;
+
+      function showQuestion() {
+        const q = quiz.questions[currentQ];
+        main.innerHTML = `
+          <button class="btn btn-ghost btn-sm mb-3" onclick="navigate('corso-${lesson.course_id}')">← Torna al corso</button>
+          <h2 style="margin-bottom:4px;">❓ ${lesson.title}</h2>
+          <p style="margin-bottom:24px;">Domanda ${currentQ + 1} di ${quiz.questions.length}</p>
+          <div class="card" style="max-width:640px;">
+            <h3 style="margin-bottom:20px;">${q.q}</h3>
+            <div id="quizOptions">
+              ${q.options.map((opt, i) => `
+                <button class="quiz-option" onclick="answerQuiz(${i}, ${q.correct})">${opt}</button>
+              `).join('')}
+            </div>
+            <div id="quizFeedback" class="mt-2 hidden"></div>
+          </div>
+          <div class="progress-bar mt-3" style="max-width:640px;"><div class="progress-fill" style="width:${((currentQ) / quiz.questions.length) * 100}%"></div></div>
+        `;
+        answered = false;
+      }
+
+      window.answerQuiz = function(selected, correct) {
+        if (answered) return;
+        answered = true;
+        const btns = document.querySelectorAll('.quiz-option');
+        btns.forEach((b, i) => {
+          if (i === correct) b.classList.add('correct');
+          if (i === selected && i !== correct) b.classList.add('wrong');
+        });
+        if (selected === correct) score++;
+        const fb = document.getElementById('quizFeedback');
+        fb.classList.remove('hidden');
+        fb.innerHTML = selected === correct
+          ? '<div class="alert alert-success show">✅ Corretto!</div>'
+          : '<div class="alert alert-error show">❌ Risposta sbagliata</div>';
+        
+        setTimeout(() => {
+          currentQ++;
+          if (currentQ < quiz.questions.length) {
+            showQuestion();
+          } else {
+            const pct = Math.round((score / quiz.questions.length) * 100);
+            main.innerHTML = `
+              <button class="btn btn-ghost btn-sm mb-3" onclick="navigate('corso-${lesson.course_id}')">← Torna al corso</button>
+              <div class="text-center" style="max-width:480px;margin:60px auto;">
+                <div style="font-size:4rem;margin-bottom:16px;">${pct >= 70 ? '🎉' : '📝'}</div>
+                <h2>${pct >= 70 ? 'Ottimo lavoro!' : 'Continua a studiare!'}</h2>
+                <p style="margin:12px 0 24px;">Hai risposto correttamente a ${score} su ${quiz.questions.length} domande (${pct}%)</p>
+                ${pct >= 70
+                  ? `<button class="btn btn-success btn-lg" onclick="completeLesson('${lesson.id}', ${score})">✅ Segna come completato</button>`
+                  : `<button class="btn btn-secondary btn-lg" onclick="navigate('lezione-${lesson.id}')">🔄 Riprova</button>`
+                }
+              </div>
+            `;
+          }
+        }, 1500);
+      };
+
+      showQuestion();
+    }
+
+    async function completeLesson(id, score) {
+      await fetch(`/api/learn/lessons/${id}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score })
+      });
+      // Refresh user data
+      const res = await fetch('/api/auth/me');
+      currentUser = await res.json();
+      navigate(currentPage.startsWith('lezione-') ? currentPage : 'percorsi');
+      // Show success inline
+      const main = document.getElementById('mainContent');
+      const alert = document.createElement('div');
+      alert.className = 'alert alert-success show';
+      alert.textContent = '✅ Lezione completata! Bravo!';
+      main.prepend(alert);
+    }
+
+    // ═══ TICKETS ═══
+    async function renderTickets() {
+      const main = document.getElementById('mainContent');
+      try {
+        const res = await fetch('/api/chat/tickets');
+        const tickets = await res.json();
+        main.innerHTML = `
+          <div class="flex items-center" style="justify-content:space-between;margin-bottom:24px;">
+            <div>
+              <h2>💬 Le tue richieste</h2>
+              <p>Chiedi aiuto e segui le risposte qui</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('newTicketModal')">+ Nuova richiesta</button>
+          </div>
+          ${tickets.length === 0 ? `
+            <div class="empty-state">
+              <div class="icon">💬</div>
+              <h3>Nessuna richiesta ancora</h3>
+              <p>Hai bisogno di aiuto? Apri la tua prima richiesta di assistenza!</p>
+              <button class="btn btn-primary" onclick="openModal('newTicketModal')">Chiedi aiuto</button>
+            </div>
+          ` : `
+            <div class="ticket-list">
+              ${tickets.map(t => `
+                <a class="ticket-item" onclick="navigate('ticket-${t.id}')">
+                  <div style="flex:1;">
+                    <div class="ticket-subject">${t.subject}</div>
+                    <div class="ticket-meta">${t.category} · ${formatDate(t.created_at)} · ${t.message_count} messaggi</div>
+                  </div>
+                  <span class="badge ${getStatusBadge(t.status)}">${t.status.replace('_',' ')}</span>
+                  ${t.last_sender_is_admin ? '<span class="notif-dot" title="Nuova risposta"></span>' : ''}
+                </a>
+              `).join('')}
+            </div>
+          `}
+        `;
+      } catch { main.innerHTML = '<p>Errore nel caricamento</p>'; }
+    }
+
+    // ═══ TICKET DETAIL ═══
+    async function renderTicketDetail(id) {
+      const main = document.getElementById('mainContent');
+      try {
+        const res = await fetch(`/api/chat/tickets/${id}`);
+        const ticket = await res.json();
+        main.innerHTML = `
+          <button class="btn btn-ghost btn-sm mb-3" onclick="navigate('assistenza')">← Torna alle richieste</button>
+          <div class="flex items-center mb-3" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+              <h2 style="font-size:1.2rem;">${ticket.subject}</h2>
+              <div style="font-size:0.82rem;color:var(--text-muted);">${ticket.category} · Creato ${formatDate(ticket.created_at)}</div>
+            </div>
+            <div class="flex gap-1">
+              <span class="badge ${getStatusBadge(ticket.status)}">${ticket.status.replace('_',' ')}</span>
+              ${ticket.status !== 'chiuso' ? `<button class="btn btn-secondary btn-sm" onclick="closeTicket('${id}')">Chiudi</button>` : ''}
+            </div>
+          </div>
+          <div class="chat-container" id="chatContainer">
+            <div class="chat-body" id="chatBody">
+              ${ticket.messages.map(m => `
+                <div class="chat-msg ${m.is_admin ? 'chat-msg-admin' : 'chat-msg-user'}">
+                  <div class="chat-msg-name">${m.is_admin ? '🛡️ Assistenza' : '👤 Tu'}</div>
+                  ${m.message}
+                  <div class="chat-msg-time">${formatDate(m.created_at)}</div>
+                </div>
+              `).join('')}
+            </div>
+            ${ticket.status !== 'chiuso' ? `
+              <div class="chat-input-bar">
+                <input type="text" id="chatInput" placeholder="Scrivi un messaggio..." onkeydown="if(event.key==='Enter')sendTicketMessage('${id}')">
+                <button class="btn btn-primary" onclick="sendTicketMessage('${id}')">Invia</button>
+              </div>
+            ` : '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.88rem;">Questo ticket è stato chiuso</div>'}
+          </div>
+        `;
+        // Scroll to bottom
+        const body = document.getElementById('chatBody');
+        body.scrollTop = body.scrollHeight;
+      } catch { main.innerHTML = '<p>Errore nel caricamento</p>'; }
+    }
+
+    async function sendTicketMessage(ticketId) {
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+      input.value = '';
+      await fetch(`/api/chat/tickets/${ticketId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      });
+      navigate(`ticket-${ticketId}`);
+    }
+
+    async function closeTicket(id) {
+      if (!confirm('Vuoi chiudere questa richiesta?')) return;
+      await fetch(`/api/chat/tickets/${id}/close`, { method: 'PUT' });
+      navigate('assistenza');
+    }
+
+    async function createTicket(e) {
+      e.preventDefault();
+      const btn = document.getElementById('createTicketBtn');
+      btn.disabled = true;
+      btn.textContent = 'Invio...';
+      try {
+        const res = await fetch('/api/chat/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: document.getElementById('ticketSubject').value.trim(),
+            category: document.getElementById('ticketCategory').value,
+            message: document.getElementById('ticketMessage').value.trim(),
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        closeModal('newTicketModal');
+        navigate(`ticket-${data.ticketId}`);
+        document.getElementById('ticketSubject').value = '';
+        document.getElementById('ticketMessage').value = '';
+      } catch (err) { alert(err.message); }
+      btn.disabled = false;
+      btn.textContent = 'Invia richiesta';
+    }
+
+    // ═══ PROFILE ═══
+    function renderProfile() {
+      const main = document.getElementById('mainContent');
+      main.innerHTML = `
+        <h2 style="margin-bottom:24px;">👤 Il tuo profilo</h2>
+        <div class="card" style="max-width:520px;">
+          <div class="form-group">
+            <label>Nome visualizzato</label>
+            <input type="text" class="form-input" id="profileName" value="${currentUser.display_name}">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" class="form-input" id="profileEmail" value="${currentUser.email}">
+          </div>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" class="form-input" value="${currentUser.username}" disabled>
+            <div class="form-hint">Lo username non è modificabile</div>
+          </div>
+          <button class="btn btn-primary" onclick="saveProfile()">Salva modifiche</button>
+        </div>
+        <div class="card mt-3" style="max-width:520px;">
+          <h3 style="margin-bottom:16px;">🔐 Cambio password</h3>
+          <div class="form-group">
+            <label>Password attuale</label>
+            <input type="password" class="form-input" id="currentPw">
+          </div>
+          <div class="form-group">
+            <label>Nuova password</label>
+            <input type="password" class="form-input" id="newPw" placeholder="Almeno 8 caratteri">
+          </div>
+          <button class="btn btn-secondary" onclick="changePassword()">Cambia password</button>
+        </div>
+        <div class="card mt-3" style="max-width:520px;font-size:0.85rem;color:var(--text-muted);">
+          <p>Membro dal: ${formatDate(currentUser.created_at)}</p>
+          <p>Ultimo accesso: ${currentUser.last_login ? formatDate(currentUser.last_login) : 'Adesso'}</p>
+          <p>Accessi totali: ${currentUser.login_count}</p>
+        </div>
+      `;
+    }
+
+    async function saveProfile() {
+      const res = await fetch('/api/auth/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          displayName: document.getElementById('profileName').value,
+          email: document.getElementById('profileEmail').value,
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const r = await fetch('/api/auth/me');
+        currentUser = await r.json();
+        document.getElementById('navName').textContent = currentUser.display_name;
+        document.getElementById('navAvatar').textContent = currentUser.display_name[0].toUpperCase();
+        alert('Profilo aggiornato!');
+      } else {
+        alert(data.error);
+      }
+    }
+
+    async function changePassword() {
+      const res = await fetch('/api/auth/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: document.getElementById('currentPw').value,
+          newPassword: document.getElementById('newPw').value,
+        })
+      });
+      const data = await res.json();
+      alert(res.ok ? 'Password cambiata!' : data.error);
+    }
+
+    // ═══ UTILS ═══
+    function formatDate(d) {
+      if (!d) return '';
+      const date = new Date(d + (d.includes('Z') ? '' : 'Z'));
+      const now = new Date();
+      const diff = now - date;
+      if (diff < 60000) return 'ora';
+      if (diff < 3600000) return Math.floor(diff / 60000) + ' min fa';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + ' ore fa';
+      return date.toLocaleDateString('it-IT', { day:'numeric', month:'short', year:'numeric' });
+    }
+
+    function getStatusBadge(s) {
+      return { aperto:'badge-primary', in_lavorazione:'badge-warning', risolto:'badge-success', chiuso:'badge-muted' }[s] || 'badge-muted';
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    async function logout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+    });
+
+    // ═══ INIT ═══
+    checkAuth();
+  </script>
+</body>
+</html>

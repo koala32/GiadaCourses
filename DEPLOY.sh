@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================
-#  Helpy v1.0 - DEPLOY.sh
-#  Deploy PULITO da GitHub — Sito statico su Nginx
-#  ⚠️  NON tocca GiadaCourses — completamente indipendente
+#  Helpy v1.0 - DEPLOY.sh (Full-Stack)
+#  Node.js + Nginx reverse proxy su porta 4000
+#  ⚠️  NON tocca GiadaCourses (porta 3000)
 #  Uso: sudo bash DEPLOY.sh
 # =============================================================
 set -euo pipefail
@@ -16,9 +16,10 @@ err()  { echo -e "${RED}[ERR]${NC} $1"; exit 1; }
 [ "$EUID" -ne 0 ] && err "Esegui come root: sudo bash DEPLOY.sh"
 
 # ── CONFIGURAZIONE ───────────────────────────────────────────
-SITE_DIR="/var/www/helpy"
-BACKUP_DIR="/var/www/helpy-backups"
+APP_DIR="/opt/helpy"
+BACKUP_DIR="/opt/helpy-backups"
 DOMAIN="helpy.duckdns.org"
+PORT="4000"
 SERVER_IP=$(curl -s --max-time 8 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 REPO_URL="https://github.com/koala32/helpy-site.git"   # ← CAMBIA con il tuo repo
@@ -26,224 +27,261 @@ REPO_BRANCH="main"
 
 echo ""
 echo -e "${BOLD}${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}${CYAN}║    Helpy v1.0 - Deploy Statico da GitHub        ║${NC}"
-echo -e "${BOLD}${CYAN}║    Server: $SERVER_IP                      ║${NC}"
-echo -e "${BOLD}${CYAN}║    ⚠️  GiadaCourses NON verrà toccato            ║${NC}"
+echo -e "${BOLD}${CYAN}║    Helpy v1.0 - Deploy Full-Stack da GitHub     ║${NC}"
+echo -e "${BOLD}${CYAN}║    Porta: $PORT | GiadaCourses: INTATTO          ║${NC}"
 echo -e "${BOLD}${CYAN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # ── STEP 1: Prerequisiti ─────────────────────────────────────
-info "1/7 Verifica prerequisiti..."
-for cmd in git nginx; do
+info "1/10 Verifica prerequisiti..."
+for cmd in node npm git nginx; do
   if ! command -v $cmd &>/dev/null; then
     warn "$cmd non trovato, installo..."
-    apt-get install -y -q $cmd > /dev/null 2>&1
+    if [ "$cmd" = "node" ] || [ "$cmd" = "npm" ]; then
+      if ! command -v node &>/dev/null || [[ $(node -v 2>/dev/null | cut -d. -f1 | tr -d v) -lt 20 ]]; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
+        apt-get install -y -q nodejs > /dev/null 2>&1
+      fi
+    else
+      apt-get install -y -q $cmd > /dev/null 2>&1
+    fi
   fi
 done
-
-# Certbot per SSL
 if ! command -v certbot &>/dev/null; then
-  info "Installo Certbot per HTTPS..."
   apt-get install -y -q certbot python3-certbot-nginx > /dev/null 2>&1
 fi
-log "Prerequisiti OK"
+log "Prerequisiti OK (Node $(node -v))"
 
-# ── STEP 2: Verifica che GiadaCourses sia intatto ────────────
-info "2/7 Verifica GiadaCourses..."
+# ── STEP 2: Verifica GiadaCourses ────────────────────────────
+info "2/10 Verifica GiadaCourses..."
 if systemctl is-active --quiet giadacourses 2>/dev/null; then
-  log "GiadaCourses è ATTIVO e non verrà toccato ✓"
+  log "GiadaCourses ATTIVO su porta 3000 — non verrà toccato ✓"
 else
-  warn "GiadaCourses non sembra attivo (non è un problema per questo deploy)"
+  warn "GiadaCourses non attivo (non è un problema per Helpy)"
 fi
 
-# ── STEP 3: Backup se esiste già ─────────────────────────────
-info "3/7 Backup..."
+# ── STEP 3: Utente di sistema ────────────────────────────────
+info "3/10 Utente di sistema..."
+id helpy &>/dev/null || useradd -r -s /bin/false helpy 2>/dev/null || true
+log "Utente helpy OK"
+
+# ── STEP 4: Backup ───────────────────────────────────────────
+info "4/10 Backup..."
 mkdir -p "$BACKUP_DIR"
-if [ -d "$SITE_DIR" ] && [ "$(ls -A $SITE_DIR 2>/dev/null)" ]; then
-  tar -czf "$BACKUP_DIR/helpy_${TIMESTAMP}.tar.gz" \
-    -C "$SITE_DIR" . 2>/dev/null && \
-    log "Backup: $BACKUP_DIR/helpy_${TIMESTAMP}.tar.gz" || \
-    warn "Backup parziale"
+if [ -d "$APP_DIR" ]; then
+  # Preserva database!
+  if [ -d "$APP_DIR/database" ]; then
+    cp -a "$APP_DIR/database" "$BACKUP_DIR/database_${TIMESTAMP}" 2>/dev/null || true
+    log "Backup database separato"
+  fi
+  tar -czf "$BACKUP_DIR/helpy_${TIMESTAMP}.tar.gz" -C "$APP_DIR" . 2>/dev/null || true
+  log "Backup completo"
 else
-  warn "Nessuna installazione precedente (primo deploy)"
+  warn "Primo deploy — nessun backup necessario"
 fi
-
-# Pulizia vecchi backup (mantieni ultimi 10)
 ls -t "$BACKUP_DIR"/helpy_*.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f
-log "Backup completato"
 
-# ── STEP 4: Clone da GitHub ──────────────────────────────────
-info "4/7 Scarico codice da GitHub..."
+# ── STEP 5: Stop servizio ────────────────────────────────────
+info "5/10 Stop servizio..."
+systemctl stop helpy 2>/dev/null && log "Servizio Helpy fermato" || warn "Servizio non attivo"
+sleep 1
+
+# ── STEP 6: Clone da GitHub ──────────────────────────────────
+info "6/10 Scarico codice da GitHub..."
 TEMP_DIR=$(mktemp -d)
 if git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$TEMP_DIR/repo" 2>/dev/null; then
-  log "Repository clonato con successo"
+  log "Repository clonato"
 else
   rm -rf "$TEMP_DIR"
-  err "Clone fallito! Verifica che il repo $REPO_URL sia accessibile"
+  err "Clone fallito! Verifica $REPO_URL"
 fi
 
-# ── STEP 5: Deploy dei file ──────────────────────────────────
-info "5/7 Deploy file statici..."
-mkdir -p "$SITE_DIR"
+# ── STEP 7: Deploy pulito (preserva database) ────────────────
+info "7/10 Deploy file..."
+mkdir -p "$APP_DIR"
 
-# Copia tutti i file dal repo (escludi .git)
-rsync -a --delete --exclude='.git' --exclude='DEPLOY.sh' \
-  "$TEMP_DIR/repo/" "$SITE_DIR/" 2>/dev/null || \
-  { cp -r "$TEMP_DIR/repo/"* "$SITE_DIR/" 2>/dev/null; }
+# Salva database
+SAVE_DIR=$(mktemp -d)
+[ -d "$APP_DIR/database" ] && mv "$APP_DIR/database" "$SAVE_DIR/database" 2>/dev/null || true
+[ -f "$APP_DIR/.env" ] && cp "$APP_DIR/.env" "$SAVE_DIR/.env" 2>/dev/null || true
 
-# Copia anche il DEPLOY.sh nella directory per futuri re-deploy
-cp "$TEMP_DIR/repo/DEPLOY.sh" "$SITE_DIR/DEPLOY.sh" 2>/dev/null || true
+# Pulizia e copia
+rm -rf "$APP_DIR/node_modules" "$APP_DIR/routes" "$APP_DIR/middleware" "$APP_DIR/public" 2>/dev/null || true
+find "$APP_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
 
-# Permessi
-chown -R www-data:www-data "$SITE_DIR"
-chmod -R 755 "$SITE_DIR"
-find "$SITE_DIR" -type f -exec chmod 644 {} \;
+cp "$TEMP_DIR/repo/server.js" "$APP_DIR/"
+cp "$TEMP_DIR/repo/package.json" "$APP_DIR/"
+cp -r "$TEMP_DIR/repo/routes" "$APP_DIR/" 2>/dev/null || true
+cp -r "$TEMP_DIR/repo/middleware" "$APP_DIR/" 2>/dev/null || true
+cp -r "$TEMP_DIR/repo/public" "$APP_DIR/" 2>/dev/null || true
+cp -r "$TEMP_DIR/repo/database" "$APP_DIR/" 2>/dev/null || true
+cp "$TEMP_DIR/repo/DEPLOY.sh" "$APP_DIR/" 2>/dev/null || true
+cp "$TEMP_DIR/repo/.env.example" "$APP_DIR/" 2>/dev/null || true
 
-# Cleanup
-rm -rf "$TEMP_DIR"
-log "File deployati in $SITE_DIR"
-log "File totali: $(find $SITE_DIR -type f | wc -l)"
-
-# ── STEP 6: Nginx Virtual Host ───────────────────────────────
-info "6/7 Configurazione Nginx..."
-
-NGINX_CONF="/etc/nginx/sites-available/helpy"
-
-# Controlla se esiste già con SSL
-HAS_SSL=false
-if [ -f "$NGINX_CONF" ] && grep -q 'ssl_certificate' "$NGINX_CONF" 2>/dev/null; then
-  HAS_SSL=true
-  log "SSL esistente rilevato — verrà preservato"
-  cp "$NGINX_CONF" "${NGINX_CONF}.ssl_backup" 2>/dev/null || true
+# Ripristina database
+mkdir -p "$APP_DIR/database"
+if [ -d "$SAVE_DIR/database" ]; then
+  mv "$SAVE_DIR/database/"* "$APP_DIR/database/" 2>/dev/null || true
+  log "Database ripristinato"
 fi
+# Ripristina .env
+if [ -f "$SAVE_DIR/.env" ]; then
+  cp "$SAVE_DIR/.env" "$APP_DIR/.env"
+  log ".env ripristinato"
+elif [ ! -f "$APP_DIR/.env" ]; then
+  cp "$APP_DIR/.env.example" "$APP_DIR/.env" 2>/dev/null || true
+  # Genera JWT secret random
+  JWT_RAND=$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | base64 | tr -d '=/+' | head -c 64)
+  sed -i "s/cambia_questo_con_una_stringa_casuale_lunga_2026/$JWT_RAND/" "$APP_DIR/.env"
+  log ".env creato con secret casuale"
+fi
+
+rm -rf "$TEMP_DIR" "$SAVE_DIR"
+log "File deployati"
+
+# ── STEP 8: npm install ──────────────────────────────────────
+info "8/10 Installo dipendenze..."
+cd "$APP_DIR"
+npm install --production 2>&1 | tail -3
+log "Dipendenze installate"
+
+# ── STEP 9: Permessi e systemd ───────────────────────────────
+info "9/10 Permessi e servizio..."
+chown -R helpy:helpy "$APP_DIR"
+chmod 755 "$APP_DIR"
+chmod 750 "$APP_DIR/database"
+
+cat > /etc/systemd/system/helpy.service << SVCEOF
+[Unit]
+Description=Helpy v1.0 — Assistenza informatica
+After=network.target
+
+[Service]
+Type=simple
+User=helpy
+Group=helpy
+WorkingDirectory=$APP_DIR
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=$PORT
+EnvironmentFile=-$APP_DIR/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=helpy
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=$APP_DIR/database
+ProtectHome=yes
+LimitNOFILE=65536
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+systemctl daemon-reload
+log "Servizio systemd configurato"
+
+# ── STEP 10: Nginx ───────────────────────────────────────────
+info "10/10 Configurazione Nginx..."
 
 cat > /etc/nginx/sites-available/helpy << 'NGINXEOF'
-# Helpy v1.0 - Nginx Configuration (Static Site)
-# ⚠️ Completamente indipendente da GiadaCourses
-
+# Helpy v1.0 Nginx — Reverse Proxy porta 4000
 server {
     listen 80;
     listen [::]:80;
     server_name helpy.duckdns.org;
+    client_max_body_size 10M;
 
-    root /var/www/helpy;
-    index index.html;
+    location /.well-known/acme-challenge/ { root /var/www/html; }
 
-    # ACME challenge per SSL
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    # Security headers
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Frame-Options "DENY" always;
     add_header X-XSS-Protection "1; mode=block" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    # Cache per asset statici
-    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff2?|ttf|eot)$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-        try_files $uri =404;
-    }
-
-    # Pagina principale
     location / {
-        try_files $uri $uri/ /index.html;
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
-
-    # Blocca accesso a file nascosti
-    location ~ /\. {
-        deny all;
-    }
-
-    # Custom 404
-    error_page 404 /index.html;
 }
 NGINXEOF
 
-# Attiva il sito (senza toccare gli altri!)
 ln -sf /etc/nginx/sites-available/helpy /etc/nginx/sites-enabled/helpy
 
-# Verifica che la config di GiadaCourses sia ancora attiva
-if [ -f "/etc/nginx/sites-enabled/giadacourses" ]; then
-  log "GiadaCourses Nginx config ancora attiva ✓"
-elif [ -f "/etc/nginx/sites-available/giadacourses" ]; then
-  # Riattiva se per qualche motivo era disattivata
-  ln -sf /etc/nginx/sites-available/giadacourses /etc/nginx/sites-enabled/giadacourses
-  warn "GiadaCourses Nginx config ri-attivata per sicurezza"
+# Verifica GiadaCourses nginx intatto
+if [ -f "/etc/nginx/sites-available/giadacourses" ]; then
+  ln -sf /etc/nginx/sites-available/giadacourses /etc/nginx/sites-enabled/giadacourses 2>/dev/null || true
+  log "GiadaCourses Nginx config intatta ✓"
 fi
 
-# Test e reload
 if nginx -t 2>/dev/null; then
   systemctl reload nginx
-  log "Nginx configurato e ricaricato"
-  log "→ helpy.duckdns.org     → /var/www/helpy (statico)"
-  log "→ giadacourses.duckdns.org → porta 3000 (Node.js) [INTATTO]"
+  log "Nginx configurato"
 else
-  warn "Errore config Nginx! Dettagli:"
+  warn "Errore Nginx:"
   nginx -t 2>&1
-  if [ "$HAS_SSL" = true ] && [ -f "${NGINX_CONF}.ssl_backup" ]; then
-    cp "${NGINX_CONF}.ssl_backup" "$NGINX_CONF"
-    systemctl reload nginx 2>/dev/null
-    warn "Ripristinata config Nginx precedente con SSL"
-  fi
 fi
 
-# ── STEP 7: SSL con Let's Encrypt ────────────────────────────
-info "7/7 Configurazione SSL..."
+# ── Avvio servizio ────────────────────────────────────────────
+info "Avvio servizio..."
+systemctl enable helpy 2>/dev/null || true
+systemctl start helpy
+sleep 3
 
+if systemctl is-active --quiet helpy; then
+  log "Servizio Helpy avviato!"
+else
+  err "Errore avvio! Log:"
+  journalctl -u helpy -n 20 --no-pager
+  exit 1
+fi
+
+# ── SSL ──────────────────────────────────────────────────────
 if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-  # SSL già presente, ri-applica
   certbot --nginx -d "$DOMAIN" --redirect --non-interactive --agree-tos \
-    --email "admin@helpy.dev" --no-eff-email 2>&1 \
-    | grep -E "Congratulations|deployed|error|certificate|redirect" || true
+    --email "admin@helpy.dev" --no-eff-email 2>&1 | grep -E "Congratulations|deployed|error" || true
   systemctl reload nginx 2>/dev/null || true
   log "SSL ri-applicato"
 else
-  # Primo setup SSL
   DNS_IP=$(getent hosts $DOMAIN 2>/dev/null | awk '{print $1}' | head -1)
   if [ "$DNS_IP" = "$SERVER_IP" ] && [ -n "$DNS_IP" ]; then
-    certbot --nginx -d "$DOMAIN" \
-      --non-interactive --agree-tos --email "admin@helpy.dev" \
-      --redirect --no-eff-email 2>&1 \
-      | grep -E "Congratulations|error|certificate" || true
-    log "SSL configurato con Let's Encrypt"
+    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
+      --email "admin@helpy.dev" --redirect --no-eff-email 2>&1 | grep -E "Congratulations|error" || true
+    log "SSL configurato"
   else
-    warn "DNS non ancora propagato (atteso: $SERVER_IP, trovato: ${DNS_IP:-nessuno})"
-    warn "Quando pronto esegui: sudo certbot --nginx -d $DOMAIN --agree-tos --email admin@helpy.dev --redirect"
+    warn "DNS non pronto. Esegui: sudo certbot --nginx -d $DOMAIN --redirect"
   fi
 fi
 
 # ── Verifica finale ──────────────────────────────────────────
-echo ""
-
-# Test HTTP
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1" -H "Host: $DOMAIN" 2>/dev/null || echo "000")
-
-# Verifica GiadaCourses intatto
 GC_STATUS="❌ Non attivo"
-if systemctl is-active --quiet giadacourses 2>/dev/null; then
-  GC_STATUS="✅ Attivo e intatto"
-fi
+systemctl is-active --quiet giadacourses 2>/dev/null && GC_STATUS="✅ Attivo (porta 3000)"
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT" 2>/dev/null || echo "000")
 
+echo ""
 echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}${GREEN}║       HELPY v1.0 — DEPLOY COMPLETATO!           ║${NC}"
+echo -e "${BOLD}${GREEN}║      HELPY v1.0 — DEPLOY COMPLETATO!            ║${NC}"
 echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "  Sito:           ${CYAN}https://$DOMAIN${NC}"
-echo -e "  Directory:      ${CYAN}$SITE_DIR${NC}"
-echo -e "  File deployati: ${CYAN}$(find $SITE_DIR -type f | wc -l) file${NC}"
+echo -e "  Porta:          ${CYAN}$PORT${NC}"
 echo -e "  HTTP Status:    ${CYAN}$HTTP_CODE${NC}"
 echo -e "  GiadaCourses:   ${CYAN}$GC_STATUS${NC}"
 echo ""
-echo -e "  ${BOLD}Comandi utili:${NC}"
-echo -e "  ${CYAN}sudo bash $SITE_DIR/DEPLOY.sh${NC}      # ri-deploy da GitHub"
-echo -e "  ${CYAN}sudo systemctl status nginx${NC}        # stato Nginx"
-echo -e "  ${CYAN}sudo nginx -t && sudo systemctl reload nginx${NC}  # reload config"
-echo -e "  ${CYAN}curl -I https://$DOMAIN${NC}            # test HTTPS"
+echo -e "  ${BOLD}Admin Login:${NC}"
+echo -e "  ${CYAN}Username: superadmin${NC}"
+echo -e "  ${CYAN}Password: (vedi .env → ADMIN_PASSWORD)${NC}"
 echo ""
-echo -e "  ${BOLD}GiadaCourses:${NC}"
-echo -e "  ${CYAN}sudo systemctl status giadacourses${NC} # verifica social OK"
+echo -e "  ${BOLD}Comandi utili:${NC}"
+echo -e "  ${CYAN}journalctl -u helpy -f${NC}           # log"
+echo -e "  ${CYAN}systemctl restart helpy${NC}           # riavvia"
+echo -e "  ${CYAN}sudo bash $APP_DIR/DEPLOY.sh${NC}      # ri-deploy"
 echo ""
 echo -e "${BOLD}${GREEN}══════════════════════════════════════════════════${NC}"

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Helpy — Assistenza informatica per tutti</title>
+  <meta name="description" content="Hai bisogno di aiuto con il computer? Helpy ti guida passo dopo passo. Guide gratuite, assistenza personalizzata e percorsi di apprendimento per tutti.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💙</text></svg>">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Nav -->
+  <nav class="navbar landing-nav" id="navbar">
+    <div class="container" style="max-width:1200px;">
+      <a href="/" class="nav-logo">💙 Helpy</a>
+      <div class="nav-links" id="navLinks">
+        <a href="#come-funziona">Come funziona</a>
+        <a href="#percorsi">Percorsi</a>
+        <a href="#missione">La nostra missione</a>
+        <a href="/login" class="btn btn-secondary btn-sm">Accedi</a>
+        <a href="/register" class="btn btn-primary btn-sm">Registrati gratis</a>
+      </div>
+      <button class="mobile-menu" onclick="document.getElementById('navLinks').classList.toggle('open');this.textContent=this.textContent==='☰'?'✕':'☰'">☰</button>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero-landing">
+    <div class="container" style="display:flex;align-items:center;gap:60px;max-width:1200px;">
+      <div class="hero-content">
+        <div class="hero-tagline">✨ 100% gratuito, per sempre</div>
+        <h1>Il computer ti sembra <em>complicato?</em> Noi lo rendiamo semplice.</h1>
+        <p>Guide passo dopo passo, assistenza personalizzata e percorsi di apprendimento pensati per chi parte da zero. Niente paroloni, solo risposte chiare.</p>
+        <div class="hero-actions">
+          <a href="/register" class="btn btn-primary btn-lg">Inizia ora — è gratis →</a>
+          <a href="#come-funziona" class="btn btn-secondary btn-lg">Scopri di più</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Come funziona -->
+  <section id="come-funziona" class="features-section">
+    <div class="container">
+      <div class="text-center">
+        <p style="color:var(--primary);font-weight:600;font-size:0.88rem;margin-bottom:8px;">COME FUNZIONA</p>
+        <h2>Tre passi per non sentirti mai più perso</h2>
+        <p style="max-width:520px;margin:12px auto 0;">Non importa da dove parti. Ti accompagniamo noi.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">📝</span>
+          <h3>1. Registrati in 30 secondi</h3>
+          <p>Crea il tuo account gratuito. Nessuna carta di credito, nessun vincolo. Solo il tuo nome e un'email.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📚</span>
+          <h3>2. Segui i percorsi guidati</h3>
+          <p>Guide semplici con immagini e quiz per imparare al tuo ritmo. Dal "come accendo il PC" alle basi della sicurezza online.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">💬</span>
+          <h3>3. Chiedi aiuto quando vuoi</h3>
+          <p>Bloccato? Apri un ticket di assistenza e ti rispondiamo noi. Nessuna domanda è troppo semplice.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Percorsi -->
+  <section id="percorsi" style="padding:80px 0;background:var(--bg);">
+    <div class="container">
+      <div class="text-center">
+        <p style="color:var(--secondary);font-weight:600;font-size:0.88rem;margin-bottom:8px;">PERCORSI DI APPRENDIMENTO</p>
+        <h2>Impara al tuo ritmo, senza fretta</h2>
+        <p style="max-width:520px;margin:12px auto 0;">Ogni percorso è pensato per chi non ha esperienza. Partiamo dalle basi, passo dopo passo.</p>
+      </div>
+      <div class="features-grid" style="margin-top:48px;">
+        <div class="card card-hover" style="text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">🖥️</div>
+          <h3>Basi del Computer</h3>
+          <p style="font-size:0.9rem;">Mouse, tastiera, cartelle, programmi — tutto quello che serve per iniziare.</p>
+          <span class="badge badge-success mt-2">Per principianti</span>
+        </div>
+        <div class="card card-hover" style="text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">🛡️</div>
+          <h3>Navigare in Sicurezza</h3>
+          <p style="font-size:0.9rem;">Password sicure, riconoscere le truffe, proteggere i tuoi dati online.</p>
+          <span class="badge badge-success mt-2">Per principianti</span>
+        </div>
+        <div class="card card-hover" style="text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">📧</div>
+          <h3>Email e Comunicazione</h3>
+          <p style="font-size:0.9rem;">Gestire la posta, evitare lo spam, comunicare in modo chiaro.</p>
+          <span class="badge badge-success mt-2">Per principianti</span>
+        </div>
+        <div class="card card-hover" style="text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">📱</div>
+          <h3>Smartphone per tutti</h3>
+          <p style="font-size:0.9rem;">Configurare il telefono, installare app, usare WhatsApp e altro.</p>
+          <span class="badge badge-success mt-2">Per principianti</span>
+        </div>
+        <div class="card card-hover" style="text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">🔧</div>
+          <h3>Risolvere i Problemi</h3>
+          <p style="font-size:0.9rem;">PC lento? Internet non va? Impara a risolvere i problemi più comuni.</p>
+          <span class="badge badge-warning mt-2">Intermedio</span>
+        </div>
+        <div class="card card-hover" style="text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:12px;">📊</div>
+          <h3>Produttività Digitale</h3>
+          <p style="font-size:0.9rem;">Word, Excel, Google Drive — gli strumenti per lavorare meglio.</p>
+          <span class="badge badge-warning mt-2">Intermedio</span>
+        </div>
+      </div>
+      <div class="text-center mt-4">
+        <a href="/register" class="btn btn-primary btn-lg">Registrati per accedere ai percorsi →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Missione -->
+  <section id="missione" style="padding:80px 0;background:var(--bg-white);">
+    <div class="container" style="max-width:720px;text-align:center;">
+      <p style="color:var(--accent);font-weight:600;font-size:0.88rem;margin-bottom:8px;">LA NOSTRA MISSIONE</p>
+      <h2 style="font-family:'DM Serif Display',serif;font-size:clamp(1.6rem,4vw,2.2rem);font-weight:400;">Crediamo che la tecnologia debba essere <em style="color:var(--primary);font-style:normal;">accessibile a tutti</em></h2>
+      <p style="font-size:1.05rem;margin-top:20px;max-width:600px;margin-left:auto;margin-right:auto;">
+        Troppo spesso chi non è esperto si sente escluso. Helpy nasce per colmare questo divario: offriamo assistenza informatica gratuita, guide pensate per esseri umani veri, e un team pronto ad aiutarti senza giudicare.
+      </p>
+      <p style="font-size:1.05rem;margin-top:16px;max-width:600px;margin-left:auto;margin-right:auto;">
+        Che tu abbia 15 o 85 anni, che tu stia imparando ad usare il computer per la prima volta o che ti serva aiuto con un problema specifico — <strong style="color:var(--text);">sei nel posto giusto</strong>.
+      </p>
+      <div style="display:flex;gap:40px;justify-content:center;margin-top:40px;flex-wrap:wrap;">
+        <div><div style="font-size:2rem;font-weight:800;color:var(--primary);">100%</div><div style="font-size:0.85rem;color:var(--text-muted);">Gratuito</div></div>
+        <div><div style="font-size:2rem;font-weight:800;color:var(--secondary);">0</div><div style="font-size:0.85rem;color:var(--text-muted);">Paroloni tecnici</div></div>
+        <div><div style="font-size:2rem;font-weight:800;color:var(--accent);">∞</div><div style="font-size:0.85rem;color:var(--text-muted);">Pazienza</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <h2>Pronto a iniziare?</h2>
+      <p>Registrati in 30 secondi e scopri un modo nuovo di imparare l'informatica.</p>
+      <a href="/register" class="btn btn-white btn-lg">Crea il tuo account gratuito →</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>💙 Helpy — Assistenza informatica per tutti</p>
+      <p style="margin-top:4px;">Self-hosted con cura su Ubuntu 24.04</p>
+    </div>
+  </footer>
+
+  <script>
+    // Navbar scroll effect
+    window.addEventListener('scroll', () => {
+      document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 50);
+    });
+    // Mobile nav
+    const style = document.createElement('style');
+    style.textContent = `@media(max-width:768px){.nav-links.open{display:flex!important;position:absolute;top:100%;left:0;right:0;background:#fff;flex-direction:column;padding:16px;border-bottom:1px solid var(--border);box-shadow:var(--shadow-md);}}`;
+    document.head.appendChild(style);
+  </script>
+</body>
+</html>

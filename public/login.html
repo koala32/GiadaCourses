@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accedi — Helpy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💙</text></svg>">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card">
+      <a href="/" class="nav-logo">💙 Helpy</a>
+      <h2>Bentornato!</h2>
+      <p class="subtitle">Accedi al tuo account per continuare</p>
+
+      <div class="alert alert-error" id="errorAlert"></div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="username">Username o Email</label>
+          <input type="text" id="username" class="form-input" placeholder="Il tuo username o email" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" class="form-input" placeholder="La tua password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn">Accedi</button>
+      </form>
+
+      <div class="auth-footer">
+        Non hai un account? <a href="/register">Registrati gratis</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const alert = document.getElementById('errorAlert');
+      alert.classList.remove('show');
+      btn.disabled = true;
+      btn.textContent = 'Accesso in corso...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('username').value.trim(),
+            password: document.getElementById('password').value,
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        // Redirect based on role
+        if (data.user.role === 'superadmin' || data.user.role === 'admin') {
+          window.location.href = '/admin';
+        } else {
+          window.location.href = '/app';
+        }
+      } catch (err) {
+        alert.textContent = err.message;
+        alert.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'Accedi';
+      }
+    }
+  </script>
+</body>
+</html>

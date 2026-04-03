@@ -1,9 +1,5 @@
-// ═══════════════════════════════════════════════════════════
-//  Security Middleware
-// ═══════════════════════════════════════════════════════════
 const rateLimit = require('express-rate-limit');
 
-// Security headers extra (oltre a helmet)
 function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -13,33 +9,34 @@ function securityHeaders(req, res, next) {
   next();
 }
 
-// Rate limiters
 const rateLimiters = {
   auth: rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 min
-    max: 15,
+    windowMs: 15 * 60 * 1000,
+    max: 20,
     message: { error: 'Troppi tentativi, riprova tra 15 minuti' },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   }),
   api: rateLimit({
     windowMs: 60 * 1000,
     max: 100,
     message: { error: 'Troppe richieste, riprova tra poco' },
+    validate: { xForwardedForHeader: false },
   }),
   chat: rateLimit({
     windowMs: 60 * 1000,
     max: 30,
-    message: { error: 'Messaggi troppo frequenti, rallenta!' },
+    message: { error: 'Messaggi troppo frequenti' },
+    validate: { xForwardedForHeader: false },
   }),
 };
 
-// Log attività nel database
 function logActivity(db, userId, action, details, ip) {
   try {
-    db.prepare('INSERT INTO activity_log (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)')
+    db.prepare("INSERT INTO activity_log (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)")
       .run(userId, action, details, ip);
-  } catch (e) { /* non bloccare per errori di log */ }
+  } catch (e) {}
 }
 
 module.exports = { securityHeaders, rateLimiters, logActivity };

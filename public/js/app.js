@@ -5757,11 +5757,10 @@ function pwaDismiss(){
 }
 
 function pwaPillShow(){
-  if(isStandalone())return; // Already installed
+  if(IS_NATIVE_APK || isStandalone())return;
   const pill=document.getElementById('pwa-pill');
   if(pill){
     pill.style.display='flex';
-    // Auto-show the panel after a further 1s to proactively guide users
     if(!localStorage.getItem('pwa_dismissed')){
       setTimeout(()=>pwaShow(),1000);
     }
@@ -5892,133 +5891,59 @@ setInterval(()=>{
 //  v10 NEW FEATURES
 // ============================================================
 
-// ── APP GATE: solo PWA — blocca TUTTI i browser ──
+// ── APP GATE: Android = APK obbligatorio, iOS = PWA ──
 (function(){
   var isPWA = IS_NATIVE_APK || IS_PWA;
-  if (isPWA) return; // PWA sempre permessa
+  if (isPWA) return;
 
   var ua = navigator.userAgent || '';
   var isAndroid = /Android/i.test(ua);
   var isIOS = /iPhone|iPad|iPod/i.test(ua);
-  var _deferredPrompt = null;
-
-  // Cattura evento beforeinstallprompt per Android
-  window.addEventListener('beforeinstallprompt', function(e) {
-    e.preventDefault();
-    _deferredPrompt = e;
-    var btn = document.getElementById('gc-install-btn');
-    if (btn) btn.style.display = 'block';
-  });
 
   function createGate() {
     var b = document.getElementById('gc-app-gate');
-    if (!b) {
-      b = document.createElement('div');
-      b.id = 'gc-app-gate';
-      document.body.insertBefore(b, document.body.firstChild);
-    }
+    if (!b) { b = document.createElement('div'); b.id = 'gc-app-gate'; document.body.insertBefore(b, document.body.firstChild); }
     b.style.cssText = 'position:fixed;inset:0;z-index:999999;background:linear-gradient(160deg,#0a0a1a 0%,#1E1E3F 40%,#2a1a4a 100%);display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;padding:30px;overflow-y:auto';
-
     var content = '<div style="max-width:380px;width:100%">';
-    content += '<div style="width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:2rem;box-shadow:0 8px 24px rgba(156,124,255,.3)">GC</div>';
+    content += '<div style="width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;box-shadow:0 8px 24px rgba(156,124,255,.3)">GC</div>';
     content += '<div style="font-family:Poppins,sans-serif;font-size:1.6rem;font-weight:800;margin-bottom:8px">GiadaCourses</div>';
-    content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:28px">Per utilizzare GiadaCourses devi installare l\'app nella schermata home del tuo dispositivo.</div>';
-
     if (isAndroid) {
-      content += '<button id="gc-install-btn" onclick="gcInstallApp()" style="width:100%;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);color:#fff;border:none;border-radius:16px;padding:16px;font-family:Poppins,sans-serif;font-weight:800;font-size:1rem;cursor:pointer;margin-bottom:14px;box-shadow:0 6px 20px rgba(156,124,255,.35)">Installa App</button>';
-      content += '<div style="background:rgba(255,255,255,.08);border-radius:14px;padding:14px;text-align:left;margin-bottom:10px">';
-      content += '<div style="font-weight:700;font-size:.82rem;margin-bottom:10px;opacity:.8">Se il bottone non funziona:</div>';
-      content += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px"><div style="background:rgba(156,124,255,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">1</div><div style="font-size:.8rem;opacity:.8">Tocca i <strong>tre puntini</strong> in alto a destra del browser</div></div>';
-      content += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px"><div style="background:rgba(156,124,255,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">2</div><div style="font-size:.8rem;opacity:.8">Tocca <strong>"Aggiungi a schermata Home"</strong> o <strong>"Installa app"</strong></div></div>';
-      content += '<div style="display:flex;align-items:flex-start;gap:8px"><div style="background:rgba(156,124,255,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">3</div><div style="font-size:.8rem;opacity:.8">Conferma toccando <strong>"Installa"</strong> o <strong>"Aggiungi"</strong></div></div>';
+      content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:24px">Per utilizzare GiadaCourses su Android scarica l\'app ufficiale.</div>';
+      content += '<a href="/uploads/GiadaCourses-beta.apk" download="GiadaCourses.apk" style="display:block;width:100%;background:linear-gradient(135deg,#4ADE80,#22C55E);color:#fff;border:none;border-radius:16px;padding:16px;font-family:Poppins,sans-serif;font-weight:800;font-size:1rem;cursor:pointer;margin-bottom:14px;box-shadow:0 6px 20px rgba(74,222,128,.35);text-decoration:none;text-align:center">Scarica App Android</a>';
+      content += '<div style="background:rgba(255,255,255,.06);border-radius:14px;padding:16px;text-align:left">';
+      content += '<div style="font-weight:700;font-size:.85rem;margin-bottom:12px">Come installare:</div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px"><div style="background:rgba(74,222,128,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">1</div><div style="font-size:.82rem;opacity:.85">Tocca <strong>Scarica App Android</strong> qui sopra</div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px"><div style="background:rgba(74,222,128,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">2</div><div style="font-size:.82rem;opacity:.85">Apri il file <strong>GiadaCourses.apk</strong></div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px"><div style="background:rgba(74,222,128,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">3</div><div style="font-size:.82rem;opacity:.85">Se richiesto, abilita <strong>Installa da fonti sconosciute</strong></div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:8px"><div style="background:rgba(74,222,128,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">4</div><div style="font-size:.82rem;opacity:.85">Tocca <strong>Installa</strong> e apri l\'app</div></div>';
       content += '</div>';
     } else if (isIOS) {
       var isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS/i.test(ua);
+      content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:24px">Aggiungi l\'app alla schermata home del tuo iPhone.</div>';
       content += '<div style="background:rgba(255,255,255,.08);border-radius:16px;padding:18px;text-align:left;margin-bottom:14px">';
-      content += '<div style="font-weight:700;font-size:.9rem;margin-bottom:14px">Come installare su iPhone:</div>';
-      if(!isSafari){
-        content += '<div style="background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.3);border-radius:12px;padding:12px;margin-bottom:14px;font-size:.82rem">Devi aprire questa pagina in <strong>Safari</strong> (non Chrome/Firefox). Copia il link e incollalo in Safari.</div>';
-      }
-      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">1</div><div style="font-size:.84rem;opacity:.9">Tocca i <strong>tre puntini</strong> (...) in basso a destra del browser</div></div>';
-      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">2</div><div style="font-size:.84rem;opacity:.9">Tocca <strong>"Condividi"</strong> (icona con la freccia verso l\'alto)</div></div>';
-      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">3</div><div style="font-size:.84rem;opacity:.9">Scorri la lista e tocca <strong>"Mostra meno"</strong> oppure scorri fino a trovare <strong>"Aggiungi alla schermata Home"</strong></div></div>';
-      content += '<div style="display:flex;align-items:flex-start;gap:10px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">4</div><div style="font-size:.84rem;opacity:.9">Tocca <strong>"Aggiungi"</strong> in alto a destra per confermare</div></div>';
+      if(!isSafari){ content += '<div style="background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.3);border-radius:12px;padding:12px;margin-bottom:14px;font-size:.82rem">Apri questa pagina in <strong>Safari</strong>.</div>'; }
+      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">1</div><div style="font-size:.84rem;opacity:.9">Tocca i <strong>tre puntini</strong> (...) in basso a destra</div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">2</div><div style="font-size:.84rem;opacity:.9">Tocca <strong>Condividi</strong> (freccia verso l\'alto)</div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">3</div><div style="font-size:.84rem;opacity:.9">Scorri e tocca <strong>Aggiungi alla schermata Home</strong></div></div>';
+      content += '<div style="display:flex;align-items:flex-start;gap:10px"><div style="background:rgba(156,124,255,.3);border-radius:8px;padding:4px 10px;font-weight:800;flex-shrink:0">4</div><div style="font-size:.84rem;opacity:.9">Tocca <strong>Aggiungi</strong> in alto a destra</div></div>';
       content += '</div>';
     } else {
-      content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:16px">Apri questa pagina dal tuo smartphone Android o iPhone e installa l\'app dalla schermata home.</div>';
-      content += '<div style="display:inline-block;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);padding:10px 24px;border-radius:12px;font-weight:700;font-size:.85rem">Solo dispositivi mobili</div>';
+      content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:16px">Apri dal tuo smartphone per scaricare l\'app.</div>';
+      content += '<a href="/uploads/GiadaCourses-beta.apk" download style="display:inline-block;background:linear-gradient(135deg,#4ADE80,#22C55E);color:#fff;padding:12px 28px;border-radius:14px;font-weight:700;text-decoration:none">Scarica per Android</a>';
     }
     content += '</div>';
     b.innerHTML = content;
     document.body.style.overflow = 'hidden';
   }
-
-  window.gcInstallApp = function() {
-    if (_deferredPrompt) {
-      _deferredPrompt.prompt();
-      _deferredPrompt.userChoice.then(function(r) {
-        if (r.outcome === 'accepted') { 
-          toast('App installata! Aprila dalla schermata home.'); 
-          setTimeout(function(){location.reload();},2000); 
-        }
-        _deferredPrompt = null;
-      });
-    } else {
-      // Il prompt nativo non e disponibile - mostra guida manuale
-      var btn = document.getElementById('gc-install-btn');
-      if(btn){
-        btn.textContent = 'Segui i passaggi qui sotto';
-        btn.style.background = 'rgba(255,255,255,.15)';
-        btn.style.pointerEvents = 'none';
-      }
-      toast('Usa i tre puntini del browser per installare','info',5000);
-    }
-  };
-
-  // Rimuovi tutto il contenuto, mostra solo il gate
-  function nukeContent() {
-    document.querySelectorAll('body > *').forEach(function(el) {
-      if (el.id !== 'gc-app-gate') el.remove();
-    });
-  }
-
-  createGate();
-  nukeContent();
-
-  // Guard: ricrea se rimosso
-  var _gateGuard = new MutationObserver(function() {
-    var b = document.getElementById('gc-app-gate');
-    if (!b || getComputedStyle(b).display === 'none') { createGate(); nukeContent(); }
-  });
+  function nukeContent() { document.querySelectorAll('body > *').forEach(function(el) { if (el.id !== 'gc-app-gate') el.remove(); }); }
+  createGate(); nukeContent();
+  var _gateGuard = new MutationObserver(function() { var b = document.getElementById('gc-app-gate'); if (!b || getComputedStyle(b).display === 'none') { createGate(); nukeContent(); } });
   _gateGuard.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
-  setInterval(function() {
-    var b = document.getElementById('gc-app-gate');
-    if (!b || getComputedStyle(b).display === 'none') { createGate(); nukeContent(); }
-    document.body.style.overflow = 'hidden';
-  }, 500);
-
-  // Anti-DevTools
-  document.addEventListener('contextmenu', function(e) {
-    var inChat = e.target.closest('.dm-sheet, .comment-input, [contenteditable], textarea, input[type="text"]');
-    if (!inChat) e.preventDefault();
-  });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'F12') { e.preventDefault(); return false; }
-    if (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase())) { e.preventDefault(); return false; }
-    if (e.ctrlKey && e.key.toUpperCase() === 'U') { e.preventDefault(); return false; }
-    if (e.ctrlKey && e.key.toUpperCase() === 'S') { e.preventDefault(); return false; }
-  });
-
-  // Anti copia fuori dalle chat
-  document.addEventListener('copy', function(e) {
-    var allowed = e.target.closest('.dm-sheet, .comment-input, .post-body, [contenteditable], textarea, input[type="text"], .comment-bubble');
-    if (!allowed) e.preventDefault();
-  });
-  document.addEventListener('selectstart', function(e) {
-    var allowed = e.target.closest('.dm-sheet, .comment-input, .post-body, [contenteditable], textarea, input, .comment-bubble');
-    if (!allowed) e.preventDefault();
-  });
+  setInterval(function() { var b = document.getElementById('gc-app-gate'); if (!b || getComputedStyle(b).display === 'none') { createGate(); nukeContent(); } document.body.style.overflow = 'hidden'; }, 500);
+  document.addEventListener('contextmenu', function(e) { var inChat = e.target.closest('.dm-sheet, .comment-input, [contenteditable], textarea, input[type="text"]'); if (!inChat) e.preventDefault(); });
+  document.addEventListener('keydown', function(e) { if (e.key === 'F12') { e.preventDefault(); return false; } if (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase())) { e.preventDefault(); return false; } if (e.ctrlKey && e.key.toUpperCase() === 'U') { e.preventDefault(); return false; } });
 })();
+
 
 // ── Dark Mode Toggle ──
 function toggleDarkMode() {

@@ -5,13 +5,17 @@
   "server": {
     "url": "https://giadacourses.duckdns.org",
     "cleartext": false,
-    "allowNavigation": ["giadacourses.duckdns.org"]
+    "allowNavigation": ["giadacourses.duckdns.org"],
+    "errorPath": "offline.html"
   },
   "android": {
     "allowMixedContent": false,
     "captureInput": true,
     "webContentsDebuggingEnabled": false,
-    "overrideUserAgent": "GiadaCourses-Android/1.0"
+    "overrideUserAgent": "GiadaCourses-Android/1.0",
+    "buildOptions": {
+      "signingType": "apksigner"
+    }
   },
   "plugins": {
     "SplashScreen": {

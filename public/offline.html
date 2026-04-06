@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>GiadaCourses — Offline</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+body{background:linear-gradient(160deg,#0a0a1a 0%,#1E1E3F 40%,#2a1a4a 100%);color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;overflow:hidden;}
+.card{max-width:380px;width:100%;animation:fadeIn .6s ease;}
+.icon{width:90px;height:90px;border-radius:22px;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);margin:0 auto 24px;display:flex;align-items:center;justify-content:center;font-size:2.8rem;box-shadow:0 12px 40px rgba(156,124,255,.3);}
+.title{font-size:1.5rem;font-weight:800;margin-bottom:8px;letter-spacing:-.5px;}
+.status{font-size:.92rem;opacity:.7;line-height:1.6;margin-bottom:24px;min-height:52px;}
+.status-icon{font-size:3rem;margin-bottom:16px;animation:pulse 2s ease-in-out infinite;}
+.detail{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;margin-bottom:20px;font-size:.82rem;line-height:1.6;text-align:left;}
+.detail strong{color:#C97BFF;}
+.btn{width:100%;background:linear-gradient(135deg,#9C7CFF,#FF9ECD);color:#fff;border:none;border-radius:16px;padding:16px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 6px 20px rgba(156,124,255,.35);transition:transform .15s,box-shadow .15s;}
+.btn:active{transform:scale(.97);box-shadow:0 3px 10px rgba(156,124,255,.2);}
+.btn:disabled{opacity:.5;pointer-events:none;}
+.retry-info{margin-top:14px;font-size:.75rem;opacity:.4;}
+.spinner{width:20px;height:20px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px;}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 3px;}
+.dot-red{background:#FF6B6B;}
+.dot-green{background:#4ADE80;}
+.dot-yellow{background:#FFD700;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">GC</div>
+  <div class="title">GiadaCourses</div>
+  <div id="status-icon" class="status-icon"></div>
+  <div id="status" class="status">Verifica connessione in corso...</div>
+
+  <div id="detail" class="detail" style="display:none"></div>
+
+  <button id="retry-btn" class="btn" onclick="checkConnection()" disabled>
+    <span class="spinner"></span> Verifica in corso...
+  </button>
+  <div id="retry-info" class="retry-info"></div>
+</div>
+
+<script>
+var SERVER_URL = 'https://giadacourses.duckdns.org';
+var retryCount = 0;
+var autoRetryInterval = null;
+
+function checkConnection() {
+  var btn = document.getElementById('retry-btn');
+  var status = document.getElementById('status');
+  var detail = document.getElementById('detail');
+  var icon = document.getElementById('status-icon');
+  var info = document.getElementById('retry-info');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Verifica in corso...';
+  status.textContent = 'Controllo connessione...';
+  icon.textContent = '';
+
+  // Step 1: Check if device has internet at all
+  if (!navigator.onLine) {
+    showResult('no-internet');
+    return;
+  }
+
+  // Step 2: Try to reach the server
+  var controller = new AbortController();
+  var timeout = setTimeout(function() { controller.abort(); }, 8000);
+
+  fetch(SERVER_URL + '/api/ping', {
+    method: 'GET',
+    signal: controller.signal,
+    cache: 'no-store'
+  })
+  .then(function(res) {
+    clearTimeout(timeout);
+    if (res.ok) {
+      showResult('online');
+    } else if (res.status >= 500) {
+      showResult('server-error', res.status);
+    } else {
+      showResult('server-issue', res.status);
+    }
+  })
+  .catch(function(err) {
+    clearTimeout(timeout);
+    // Device has internet but can't reach our server
+    // Try reaching a known public URL to confirm internet works
+    fetch('https://www.google.com/generate_204', { mode: 'no-cors', cache: 'no-store' })
+    .then(function() {
+      // Internet works, server is down
+      showResult('server-down');
+    })
+    .catch(function() {
+      // No internet at all
+      showResult('no-internet');
+    });
+  });
+}
+
+function showResult(type, code) {
+  var btn = document.getElementById('retry-btn');
+  var status = document.getElementById('status');
+  var detail = document.getElementById('detail');
+  var icon = document.getElementById('status-icon');
+  var info = document.getElementById('retry-info');
+  retryCount++;
+
+  btn.disabled = false;
+
+  if (type === 'online') {
+    icon.textContent = '\u2705';
+    status.textContent = 'Connessione ristabilita!';
+    detail.style.display = 'block';
+    detail.innerHTML = '<span class="dot dot-green"></span> <strong>Server online</strong> — Reindirizzamento in corso...';
+    btn.innerHTML = 'Apri GiadaCourses';
+    btn.onclick = function() { window.location.href = SERVER_URL; };
+    info.textContent = '';
+    // Auto redirect
+    clearInterval(autoRetryInterval);
+    setTimeout(function() { window.location.href = SERVER_URL; }, 1500);
+    return;
+  }
+
+  if (type === 'no-internet') {
+    icon.textContent = '\uD83D\uDCF5';
+    status.textContent = 'Nessuna connessione internet';
+    detail.style.display = 'block';
+    detail.innerHTML = '<span class="dot dot-red"></span> <strong>Il tuo dispositivo non e connesso a internet.</strong><br><br>'
+      + 'Controlla che il WiFi o i dati mobili siano attivi, poi riprova.';
+    btn.innerHTML = 'Riprova';
+    btn.onclick = checkConnection;
+  } else if (type === 'server-down') {
+    icon.textContent = '\uD83D\uDEE0\uFE0F';
+    status.textContent = 'GiadaCourses e temporaneamente offline';
+    detail.style.display = 'block';
+    detail.innerHTML = '<span class="dot dot-yellow"></span> <strong>La tua connessione internet funziona</strong>, ma il server di GiadaCourses non risponde.<br><br>'
+      + 'Potrebbe essere in manutenzione. Riprova tra qualche minuto.';
+    btn.innerHTML = 'Riprova';
+    btn.onclick = checkConnection;
+  } else if (type === 'server-error') {
+    icon.textContent = '\u26A0\uFE0F';
+    status.textContent = 'Errore del server (' + (code||500) + ')';
+    detail.style.display = 'block';
+    detail.innerHTML = '<span class="dot dot-yellow"></span> <strong>Il server ha riscontrato un errore.</strong><br><br>'
+      + 'Il team sta lavorando per risolvere il problema. Riprova tra qualche minuto.';
+    btn.innerHTML = 'Riprova';
+    btn.onclick = checkConnection;
+  } else {
+    icon.textContent = '\u2753';
+    status.textContent = 'Problema di connessione';
+    detail.style.display = 'block';
+    detail.innerHTML = '<span class="dot dot-yellow"></span> <strong>Non riusciamo a raggiungere il server.</strong><br><br>'
+      + 'Verifica la tua connessione e riprova.';
+    btn.innerHTML = 'Riprova';
+    btn.onclick = checkConnection;
+  }
+
+  info.textContent = 'Tentativo ' + retryCount + ' — Riprova automatico tra 15 secondi';
+  startAutoRetry();
+}
+
+function startAutoRetry() {
+  clearInterval(autoRetryInterval);
+  var countdown = 15;
+  var info = document.getElementById('retry-info');
+  autoRetryInterval = setInterval(function() {
+    countdown--;
+    if (countdown <= 0) {
+      clearInterval(autoRetryInterval);
+      checkConnection();
+    } else {
+      info.textContent = 'Tentativo ' + retryCount + ' — Riprova automatico tra ' + countdown + ' secondi';
+    }
+  }, 1000);
+}
+
+// Listen for online/offline events
+window.addEventListener('online', function() {
+  setTimeout(checkConnection, 1000);
+});
+
+// Start check on load
+setTimeout(checkConnection, 500);
+</script>
+</body>
+</html>

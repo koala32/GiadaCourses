@@ -7,6 +7,13 @@ const BADGES_DEF=[{e:'⭐',n:'Stella'},{e:'🎯',n:'Obiettivo'},{e:'🎓',n:'Sch
 const LEVELS=['A1','A2','B1','B2','C1','C2'];
 const XP_LEVELS=[0,200,500,1000,2000,4000,99999];
 
+/* ── Platform Detection ── */
+const IS_NATIVE_APK = /GiadaCourses-Android/i.test(navigator.userAgent) || !!window.Capacitor;
+const IS_PWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const IS_APP = IS_NATIVE_APK || IS_PWA; // Either native or PWA = "app mode"
+
 function pickColor(str){let h=0;for(const c of(str||'?'))h=(h<<5)-h+c.charCodeAt(0);return COLORS[Math.abs(h)%COLORS.length];}
 function initials(name){return(name||'?').split(/[\s_]+/).map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?';}
 function timeAgo(ts){const d=Date.now()-ts;if(d<60e3)return 'adesso';if(d<3600e3)return Math.floor(d/60e3)+'m fa';if(d<86400e3)return Math.floor(d/3600e3)+'h fa';return Math.floor(d/86400e3)+'g fa';}
@@ -1406,11 +1413,11 @@ async function viewUser(uid){
             ${isFollowing?`<button class="bell-btn${bellActive?' active':''}" id="bell-btn-${uid}" data-bell-uid="${uid}" title="${bellActive?'Disattiva notifiche':'Attiva notifiche per questo utente'}"><span class="bell-icon">${bellActive?'&#x1F514;':'&#x1F515;'}</span></button>`:''}
           </div>
           <button class="follow-btn" onclick="closeUserModal();openDMWith('${uid}')" style="background:linear-gradient(135deg,var(--teal),var(--blue));margin-top:8px">Invia messaggio</button>
-          <div style="display:flex;gap:8px;margin-top:8px">
+          ${IS_NATIVE_APK?`<div style="display:flex;gap:8px;margin-top:8px">
             <button class="follow-btn" data-call-uid="${uid}" data-call-un="${escAttr(u.username)}" data-call-av="${escAttr(u.avatar||'')}" style="flex:1;background:linear-gradient(135deg,#34C759,#30B350)">Chiama</button>
             <button class="follow-btn" data-vid-uid="${uid}" data-vid-un="${escAttr(u.username)}" data-vid-av="${escAttr(u.avatar||'')}" style="flex:1;background:linear-gradient(135deg,#007AFF,#0040DD)">Video</button>
           </div>
-          <button class="follow-btn" data-ch-uid="${uid}" data-ch-un="${escAttr(u.username)}" data-ch-av="${escAttr(u.avatar||'')}" style="width:100%;margin-top:8px;background:linear-gradient(135deg,var(--coral),var(--orange))">Sfida 1v1</button>
+          <button class="follow-btn" data-ch-uid="${uid}" data-ch-un="${escAttr(u.username)}" data-ch-av="${escAttr(u.avatar||'')}" style="width:100%;margin-top:8px;background:linear-gradient(135deg,var(--coral),var(--orange))">Sfida 1v1</button>`:''}
         `:''}
         ${!ME?`<button class="follow-btn" onclick="closeUserModal();openAuth()">Accedi per seguire</button>`:''}
       </div>
@@ -3081,9 +3088,14 @@ function handleStoryMedia(input,type){
       var wrap=document.createElement('div');
       wrap.className='sc-media-wrap';
       wrap.style.cssText='position:absolute;inset:0;overflow:hidden;touch-action:none';
+      // Blurred background for small images
+      var bgImg=document.createElement('img');
+      bgImg.src=url;
+      bgImg.style.cssText='position:absolute;inset:-20px;width:calc(100% + 40px);height:calc(100% + 40px);object-fit:cover;filter:blur(30px) brightness(.4);pointer-events:none;z-index:0';
+      wrap.appendChild(bgImg);
       var img=document.createElement('img');
       img.src=url;
-      img.style.cssText='width:100%;height:100%;object-fit:cover;transform-origin:center center;will-change:transform;pointer-events:none;user-select:none;-webkit-user-drag:none';
+      img.style.cssText='width:100%;height:100%;object-fit:contain;transform-origin:center center;will-change:transform;pointer-events:none;user-select:none;-webkit-user-drag:none;position:relative;z-index:1';
       img.draggable=false;
       wrap.appendChild(img);
       preview.insertAdjacentElement('afterbegin',wrap);
@@ -3508,9 +3520,9 @@ async function renderDMSheet(){
         <div class="avatar-circle" style="width:38px;height:38px;background:${pickColor(dmCurrentUser.username)};font-size:.95rem;overflow:hidden;flex-shrink:0">${dmCurrentUser.avatarUrl?`<img src="${dmCurrentUser.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:dmCurrentUser.avatar||initials(dmCurrentUser.username)}</div>
         <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${escHTML(dmCurrentUser.username)}</strong></div>
         <div style="display:flex;gap:6px;flex-shrink:0">
-          <button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-vid="0" title="Chiamata vocale" style="background:rgba(52,199,89,.15);border:1px solid rgba(52,199,89,.3);color:#34C759;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">📞</button>
+          ${IS_NATIVE_APK?`<button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-vid="0" title="Chiamata vocale" style="background:rgba(52,199,89,.15);border:1px solid rgba(52,199,89,.3);color:#34C759;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">📞</button>
           <button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-vid="1" title="Videochiamata" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.3);color:#007AFF;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">📹</button>
-          <button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-ch="1" title="Sfida 1v1" style="background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.3);color:var(--coral);border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">⚔️</button>
+          <button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-ch="1" title="Sfida 1v1" style="background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.3);color:var(--coral);border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">⚔️</button>`:''}
           <button class="dm-close" onclick="closeDM()">✕</button>
         </div>
       </div>
@@ -5699,6 +5711,7 @@ function initPWA(){
 
 // ── PWA Panel (bottom sheet) ──
 function pwaShow(){
+  if(IS_NATIVE_APK) return; // APK users don't need install prompt
   const panel=document.getElementById('pwa-panel');
   if(!panel)return;
   // Show correct instructions
@@ -5881,7 +5894,7 @@ setInterval(()=>{
 
 // ── APP GATE: solo PWA — blocca TUTTI i browser ──
 (function(){
-  var isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || /GiadaCourses-Android/i.test(navigator.userAgent) || window.Capacitor;
+  var isPWA = IS_NATIVE_APK || IS_PWA;
   if (isPWA) return; // PWA sempre permessa
 
   var ua = navigator.userAgent || '';

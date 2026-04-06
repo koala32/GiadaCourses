@@ -1415,9 +1415,8 @@ async function viewUser(uid){
           <button class="follow-btn" onclick="closeUserModal();openDMWith('${uid}')" style="background:linear-gradient(135deg,var(--teal),var(--blue));margin-top:8px">Invia messaggio</button>
           ${IS_NATIVE_APK?`<div style="display:flex;gap:8px;margin-top:8px">
             <button class="follow-btn" data-call-uid="${uid}" data-call-un="${escAttr(u.username)}" data-call-av="${escAttr(u.avatar||'')}" style="flex:1;background:linear-gradient(135deg,#34C759,#30B350)">Chiama</button>
-            <button class="follow-btn" data-vid-uid="${uid}" data-vid-un="${escAttr(u.username)}" data-vid-av="${escAttr(u.avatar||'')}" style="flex:1;background:linear-gradient(135deg,#007AFF,#0040DD)">Video</button>
-          </div>
-          <button class="follow-btn" data-ch-uid="${uid}" data-ch-un="${escAttr(u.username)}" data-ch-av="${escAttr(u.avatar||'')}" style="width:100%;margin-top:8px;background:linear-gradient(135deg,var(--coral),var(--orange))">Sfida 1v1</button>`:''}
+            <button class="follow-btn" data-ch-uid="${uid}" data-ch-un="${escAttr(u.username)}" data-ch-av="${escAttr(u.avatar||'')}" style="flex:1;background:linear-gradient(135deg,var(--coral),var(--orange))">Sfida 1v1</button>
+          </div>`:''}
         `:''}
         ${!ME?`<button class="follow-btn" onclick="closeUserModal();openAuth()">Accedi per seguire</button>`:''}
       </div>
@@ -3521,7 +3520,6 @@ async function renderDMSheet(){
         <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${escHTML(dmCurrentUser.username)}</strong></div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           ${IS_NATIVE_APK?`<button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-vid="0" title="Chiamata vocale" style="background:rgba(52,199,89,.15);border:1px solid rgba(52,199,89,.3);color:#34C759;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">📞</button>
-          <button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-vid="1" title="Videochiamata" style="background:rgba(0,122,255,.15);border:1px solid rgba(0,122,255,.3);color:#007AFF;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">📹</button>
           <button class="call-dm-btn" data-dm-uid="${dmCurrentUser._id}" data-dm-un="${escAttr(dmCurrentUser.username)}" data-dm-av="${escAttr(dmCurrentUser.avatar||'👤')}" data-dm-ch="1" title="Sfida 1v1" style="background:rgba(255,107,107,.15);border:1px solid rgba(255,107,107,.3);color:var(--coral);border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:.9rem;display:flex;align-items:center;justify-content:center">⚔️</button>`:''}
           <button class="dm-close" onclick="closeDM()">✕</button>
         </div>

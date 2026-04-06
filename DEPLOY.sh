@@ -279,6 +279,13 @@ server {
         add_header Cache-Control "public, max-age=86400";
         add_header Accept-Ranges bytes;
         add_header Access-Control-Allow-Origin *;
+        # Blocca accesso diretto all'APK - deve passare dal sito
+        location ~* \.apk$ {
+            valid_referers server_names giadacourses.duckdns.org;
+            if ($invalid_referer) { return 403; }
+            alias /opt/GiadaCoursess/uploads/;
+            add_header Content-Disposition 'attachment; filename="GiadaCourses.apk"';
+        }
         try_files $uri =404;
     }
 

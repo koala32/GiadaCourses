@@ -1,0 +1,28 @@
+{
+  "appId": "com.giadacourses.app",
+  "appName": "GiadaCourses",
+  "webDir": "public",
+  "server": {
+    "url": "https://giadacourses.duckdns.org",
+    "cleartext": false,
+    "allowNavigation": ["giadacourses.duckdns.org"]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "overrideUserAgent": "GiadaCourses-Android/1.0"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#1E1E3F",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "style": "LIGHT",
+      "backgroundColor": "#1E1E3F"
+    }
+  }
+}

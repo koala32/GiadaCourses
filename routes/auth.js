@@ -1,129 +1,229 @@
-const express = require('express');
-const router = express.Router();
+// routes/auth.js — Autenticazione + Profili utente + Follow + Campanellina
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
-const db = require('../database/init');
-const { authenticateToken, SECRET } = require('../middleware/auth');
-const { logActivity } = require('../middleware/security');
+const crypto = require('crypto');
+const { db } = require('../lib/db');
+const { sseEmit } = require('../lib/sse');
+const { upload } = require('../lib/upload');
+const { requireAuth, requireRole } = require('../middleware');
 
-function setTokenCookie(res, req, token) {
-  res.cookie('token', token, {
-    httpOnly: true,
-    secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
+module.exports = function(app) {
+
+  // ── REGISTRAZIONE ──
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const { username, email, password, level, nativeLang, goal, city, bio } = req.body || {};
+      if (!username?.trim()) return res.status(400).json({ error: 'Username obbligatorio' });
+      if (!email?.trim()) return res.status(400).json({ error: 'Email obbligatoria' });
+      if (!password) return res.status(400).json({ error: 'Password obbligatoria' });
+      if (password.length < 6) return res.status(400).json({ error: 'Password troppo corta (minimo 6 caratteri)' });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: 'Email non valida' });
+      if (!/^[a-zA-Z0-9_\-]+$/.test(username.trim())) return res.status(400).json({ error: 'Username: solo lettere, numeri, _ e -' });
+      const cleanUsername = username.trim().slice(0, 30);
+      const cleanEmail = email.toLowerCase().trim().slice(0, 100);
+      const existing = await db.users.findOneAsync({ $or: [{ email: cleanEmail }, { username: cleanUsername }] });
+      if (existing) return res.status(400).json({ error: existing.email === cleanEmail ? 'Email gia registrata' : 'Username gia in uso' });
+      const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+      const ip = rawIp.split(',')[0].trim().replace('::ffff:', '').replace('::1', '127.0.0.1');
+      const hash = await bcrypt.hash(password, 12);
+      const user = await db.users.insertAsync({
+        username: cleanUsername, email: cleanEmail, passwordHash: hash, role: 'user',
+        avatar: '', avatarUrl: '', xp: 0, level: level || 'A1', streak: 0, badges: [],
+        bio: (bio || '').slice(0, 200), city: (city || '').slice(0, 50),
+        nativeLang: nativeLang || '', goal: (goal || '').slice(0, 100),
+        following: [], followers: [], progress: {},
+        notifyUsers: [], dmNotifyOff: [], verified: false,
+        theme: 'light', themeColor: '',
+        joinDate: Date.now(), lastSeen: Date.now(), banned: false, ip,
+      });
+      const token = crypto.randomBytes(32).toString('hex');
+      await db.sessions.insertAsync({ token, userId: user._id, createdAt: Date.now() });
+      const { passwordHash, ...safe } = user;
+      res.json({ user: safe, token });
+    } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
   });
-}
 
-router.post('/register', (req, res) => {
-  try {
-    const { username, email, password, displayName } = req.body;
-    if (!username || !email || !password || !displayName)
-      return res.status(400).json({ error: 'Tutti i campi sono obbligatori' });
-    if (username.length < 3 || username.length > 30)
-      return res.status(400).json({ error: 'Lo username deve avere tra 3 e 30 caratteri' });
-    if (!/^[a-zA-Z0-9_]+$/.test(username))
-      return res.status(400).json({ error: 'Lo username puo contenere solo lettere, numeri e underscore' });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      return res.status(400).json({ error: 'Inserisci un indirizzo email valido' });
-    if (password.length < 8)
-      return res.status(400).json({ error: 'La password deve avere almeno 8 caratteri' });
-    if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password))
-      return res.status(400).json({ error: 'Servono almeno una maiuscola, una minuscola e un numero' });
+  // ── LOGIN ──
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) return res.status(400).json({ error: 'Email e password richieste' });
+      const user = await db.users.findOneAsync({ email: email.toLowerCase().trim() });
+      if (!user) return res.status(401).json({ error: 'Email o password errata' });
+      if (user.banned) return res.status(403).json({ error: "Account sospeso. Contatta l'amministratore." });
+      const ok = await bcrypt.compare(password, user.passwordHash);
+      if (!ok) return res.status(401).json({ error: 'Email o password errata' });
+      await db.users.updateAsync({ _id: user._id }, { $set: { lastSeen: Date.now() } });
+      const token = crypto.randomBytes(32).toString('hex');
+      await db.sessions.insertAsync({ token, userId: user._id, createdAt: Date.now() });
+      const { passwordHash, ...safe } = user;
+      res.json({ user: safe, token, mustChangePassword: !!user.mustChangePassword });
+    } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
+  });
 
-    const existing = db.prepare('SELECT username, email FROM users WHERE username = ? OR email = ?')
-      .get(username.toLowerCase(), email.toLowerCase());
-    if (existing) {
-      if (existing.username === username.toLowerCase())
-        return res.status(409).json({ error: 'Username gia in uso. Provane un altro.' });
-      return res.status(409).json({ error: 'Email gia registrata. Prova ad accedere.' });
+  app.post('/api/auth/logout', requireAuth, async (req, res) => {
+    const token = (req.headers.authorization || '').replace('Bearer ', '');
+    await db.sessions.removeAsync({ token }, {});
+    res.json({ ok: true });
+  });
+
+  app.get('/api/auth/me', requireAuth, async (req, res) => {
+    const { passwordHash, ...safe } = req.user;
+    res.json(safe);
+  });
+
+  // ── UTENTI ──
+  app.get('/api/leaderboard', async (req, res) => {
+    const users = await db.users.findAsync({ banned: false });
+    res.json(users.sort((a, b) => (b.xp||0) - (a.xp||0)).slice(0, 50).map(({ passwordHash, ip, ...u }) => u));
+  });
+
+  app.get('/api/users/suggestions', requireAuth, async (req, res) => {
+    try {
+      const me = await db.users.findOneAsync({ _id: req.user._id });
+      const myFollowing = me.following || [];
+      const all = await db.users.findAsync({ banned: false, _id: { $ne: me._id } });
+      res.json(all.filter(u => !myFollowing.includes(u._id)).sort(() => Math.random() - 0.5).slice(0, 10).map(({ passwordHash, ip, email, ...u }) => u));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/users/:id/followers', async (req, res) => {
+    try {
+      const user = await db.users.findOneAsync({ _id: req.params.id });
+      if (!user) return res.status(404).json({ error: 'Utente non trovato' });
+      const users = await db.users.findAsync({ _id: { $in: user.followers || [] } });
+      res.json(users.map(({ passwordHash, ip, email, ...u }) => u));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/users/:id/following', async (req, res) => {
+    try {
+      const user = await db.users.findOneAsync({ _id: req.params.id });
+      if (!user) return res.status(404).json({ error: 'Utente non trovato' });
+      const users = await db.users.findAsync({ _id: { $in: user.following || [] } });
+      res.json(users.map(({ passwordHash, ip, email, ...u }) => u));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/users/:id', async (req, res) => {
+    const user = await db.users.findOneAsync({ _id: req.params.id });
+    if (!user) return res.status(404).json({ error: 'Utente non trovato' });
+    const { passwordHash, ip, email, ...safe } = user;
+    res.json(safe);
+  });
+
+  app.put('/api/users/me', requireAuth, async (req, res) => {
+    const allowed = ['username','bio','city','level','avatar','nativeLang','goal','theme','themeColor'];
+    const update = {};
+    allowed.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k]; });
+    await db.users.updateAsync({ _id: req.user._id }, { $set: update });
+    const updated = await db.users.findOneAsync({ _id: req.user._id });
+    const { passwordHash, ...safe } = updated;
+    res.json(safe);
+  });
+
+  app.put('/api/users/me/password', requireAuth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Campi mancanti' });
+    const ok = await bcrypt.compare(currentPassword, req.user.passwordHash);
+    if (!ok) return res.status(401).json({ error: 'Password attuale errata' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Nuova password troppo corta' });
+    const hash = await bcrypt.hash(newPassword, 12);
+    await db.users.updateAsync({ _id: req.user._id }, { $set: { passwordHash: hash } });
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/users/me', requireAuth, async (req, res) => {
+    await db.users.removeAsync({ _id: req.user._id }, {});
+    await db.posts.removeAsync({ userId: req.user._id }, { multi: true });
+    await db.comments.removeAsync({ userId: req.user._id }, { multi: true });
+    await db.messages.removeAsync({ $or: [{ fromId: req.user._id }, { toId: req.user._id }] }, { multi: true });
+    await db.stories.removeAsync({ userId: req.user._id }, { multi: true });
+    const token = (req.headers.authorization || '').replace('Bearer ', '');
+    await db.sessions.removeAsync({ token }, {});
+    res.json({ ok: true });
+  });
+
+  // ── FOLLOW ──
+  app.post('/api/users/:id/follow', requireAuth, async (req, res) => {
+    const targetId = req.params.id;
+    if (targetId === req.user._id) return res.status(400).json({ error: 'Non puoi seguire te stesso' });
+    const me = await db.users.findOneAsync({ _id: req.user._id });
+    const target = await db.users.findOneAsync({ _id: targetId });
+    if (!target) return res.status(404).json({ error: 'Utente non trovato' });
+    const already = (me.following || []).includes(targetId);
+    await db.users.updateAsync({ _id: me._id }, { $set: { following: already ? (me.following||[]).filter(id=>id!==targetId) : [...(me.following||[]), targetId] } });
+    await db.users.updateAsync({ _id: targetId }, { $set: { followers: already ? (target.followers||[]).filter(id=>id!==me._id) : [...(target.followers||[]), me._id] } });
+    if (already) {
+      const myNotify = me.notifyUsers || [];
+      if (myNotify.includes(targetId)) await db.users.updateAsync({ _id: me._id }, { $set: { notifyUsers: myNotify.filter(id=>id!==targetId) } });
     }
+    res.json({ following: !already });
+  });
 
-    const id = uuidv4();
-    const hash = bcrypt.hashSync(password, 12);
-    db.prepare("INSERT INTO users (id, username, email, password_hash, display_name) VALUES (?,?,?,?,?)")
-      .run(id, username.toLowerCase(), email.toLowerCase(), hash, displayName.trim());
+  // ── CAMPANELLINA ──
+  app.post('/api/users/:id/notify-toggle', requireAuth, async (req, res) => {
+    try {
+      const targetId = req.params.id;
+      if (targetId === req.user._id) return res.status(400).json({ error: 'Non puoi attivare notifiche per te stesso' });
+      const me = await db.users.findOneAsync({ _id: req.user._id });
+      if (!(me.following || []).includes(targetId)) return res.status(400).json({ error: 'Devi seguire questo utente' });
+      const notifyUsers = me.notifyUsers || [];
+      const active = notifyUsers.includes(targetId);
+      await db.users.updateAsync({ _id: me._id }, { $set: { notifyUsers: active ? notifyUsers.filter(id => id !== targetId) : [...notifyUsers, targetId] } });
+      res.json({ notify: !active });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 
-    const token = jwt.sign({ userId: id }, SECRET, { expiresIn: '7d' });
-    setTokenCookie(res, req, token);
-    logActivity(db, id, 'register', 'Nuovo utente: ' + username, req.ip);
-    res.json({ success: true, user: { id, username: username.toLowerCase(), displayName: displayName.trim(), role: 'user' } });
-  } catch (err) {
-    console.error('Register error:', err);
-    res.status(500).json({ error: 'Errore durante la registrazione. Riprova.' });
-  }
-});
+  app.get('/api/users/:id/notify-status', requireAuth, async (req, res) => {
+    const me = await db.users.findOneAsync({ _id: req.user._id });
+    res.json({ notify: (me.notifyUsers || []).includes(req.params.id) });
+  });
 
-router.post('/login', (req, res) => {
-  try {
-    const { username, password } = req.body;
-    if (!username || !password)
-      return res.status(400).json({ error: 'Inserisci username/email e password' });
+  // ── DM NOTIFICHE TOGGLE ──
+  app.post('/api/users/:id/dm-notify-toggle', requireAuth, async (req, res) => {
+    try {
+      const me = await db.users.findOneAsync({ _id: req.user._id });
+      const off = me.dmNotifyOff || [];
+      const isMuted = off.includes(req.params.id);
+      await db.users.updateAsync({ _id: me._id }, { $set: { dmNotifyOff: isMuted ? off.filter(id => id !== req.params.id) : [...off, req.params.id] } });
+      res.json({ muted: !isMuted });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 
-    const user = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?')
-      .get(username.toLowerCase(), username.toLowerCase());
+  app.get('/api/users/:id/dm-notify-status', requireAuth, async (req, res) => {
+    const me = await db.users.findOneAsync({ _id: req.user._id });
+    res.json({ muted: (me.dmNotifyOff || []).includes(req.params.id) });
+  });
 
-    if (!user) {
-      logActivity(db, null, 'login_failed', 'Utente non trovato: ' + username, req.ip);
-      return res.status(401).json({ error: 'Nessun account trovato. Controlla i dati o registrati.', notFound: true });
-    }
-    if (!bcrypt.compareSync(password, user.password_hash)) {
-      logActivity(db, user.id, 'login_failed', 'Password sbagliata', req.ip);
-      return res.status(401).json({ error: 'Password non corretta. Riprova.', wrongPassword: true });
-    }
-    if (user.is_banned)
-      return res.status(403).json({ error: 'Account sospeso. Contatta amministratore.' });
-    if (!user.is_active)
-      return res.status(403).json({ error: 'Account disattivato.' });
+  // ── FOTO PROFILO ──
+  app.post('/api/users/me/avatar', requireAuth, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'Nessun file ricevuto' });
+      const ext = require('path').extname(req.file.filename).toLowerCase();
+      if (!/\.(jpg|jpeg|png|gif|webp)$/.test(ext)) {
+        try { require('fs').unlinkSync(require('path').join(require('../lib/upload').UPLOADS_DIR, req.file.filename)); } catch {}
+        return res.status(400).json({ error: 'Solo immagini consentite' });
+      }
+      const oldUser = await db.users.findOneAsync({ _id: req.user._id });
+      if (oldUser?.avatarUrl?.startsWith('/uploads/')) {
+        try { require('fs').unlinkSync(require('path').join(__dirname, '..', oldUser.avatarUrl)); } catch {}
+      }
+      const avatarUrl = '/uploads/' + req.file.filename;
+      await db.users.updateAsync({ _id: req.user._id }, { $set: { avatarUrl, avatar: '' } });
+      const updated = await db.users.findOneAsync({ _id: req.user._id });
+      const { passwordHash, ...safe } = updated;
+      res.json(safe);
+    } catch (e) { res.status(500).json({ error: 'Errore durante il caricamento' }); }
+  });
 
-    db.prepare("UPDATE users SET last_login = datetime('now'), login_count = login_count + 1 WHERE id = ?").run(user.id);
-    const token = jwt.sign({ userId: user.id }, SECRET, { expiresIn: '7d' });
-    setTokenCookie(res, req, token);
-    logActivity(db, user.id, 'login', 'Login effettuato', req.ip);
-
-    res.json({ success: true, user: { id: user.id, username: user.username, displayName: user.display_name, email: user.email, role: user.role } });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Errore durante il login. Riprova.' });
-  }
-});
-
-router.post('/logout', (req, res) => {
-  res.clearCookie('token', { path: '/' });
-  res.json({ success: true });
-});
-
-router.get('/me', authenticateToken, (req, res) => {
-  const user = db.prepare('SELECT id,username,email,display_name,role,avatar_url,created_at,last_login,login_count FROM users WHERE id=?').get(req.user.id);
-  const ticketCount = db.prepare('SELECT COUNT(*) as n FROM tickets WHERE user_id=?').get(req.user.id).n;
-  const completedLessons = db.prepare('SELECT COUNT(*) as n FROM user_progress WHERE user_id=? AND completed=1').get(req.user.id).n;
-  res.json({ ...user, stats: { tickets: ticketCount, lessonsCompleted: completedLessons } });
-});
-
-router.put('/me', authenticateToken, (req, res) => {
-  const { displayName, email } = req.body;
-  if (displayName) db.prepare("UPDATE users SET display_name=?, updated_at=datetime('now') WHERE id=?").run(displayName.trim(), req.user.id);
-  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    const existing = db.prepare('SELECT id FROM users WHERE email=? AND id!=?').get(email.toLowerCase(), req.user.id);
-    if (existing) return res.status(409).json({ error: 'Email gia in uso' });
-    db.prepare("UPDATE users SET email=?, updated_at=datetime('now') WHERE id=?").run(email.toLowerCase(), req.user.id);
-  }
-  res.json({ success: true });
-});
-
-router.put('/password', authenticateToken, (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  const user = db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user.id);
-  if (!bcrypt.compareSync(currentPassword, user.password_hash))
-    return res.status(400).json({ error: 'Password attuale non corretta' });
-  if (newPassword.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword))
-    return res.status(400).json({ error: 'Nuova password: almeno 8 caratteri con maiuscola, minuscola e numero' });
-
-  db.prepare("UPDATE users SET password_hash=?, updated_at=datetime('now') WHERE id=?").run(bcrypt.hashSync(newPassword, 12), req.user.id);
-  logActivity(db, req.user.id, 'password_change', 'Password modificata', req.ip);
-  res.json({ success: true });
-});
-
-module.exports = router;
+  // ── VERIFICA UTENTE (solo Giada) ──
+  app.post('/api/users/:id/verify', requireAuth, async (req, res) => {
+    const isGiada = req.user.username?.toLowerCase() === 'giada' || req.user.role === 'superadmin';
+    if (!isGiada) return res.status(403).json({ error: 'Solo Giada puo verificare gli utenti' });
+    const user = await db.users.findOneAsync({ _id: req.params.id });
+    if (!user) return res.status(404).json({ error: 'Utente non trovato' });
+    const newVerified = !user.verified;
+    await db.users.updateAsync({ _id: req.params.id }, { $set: { verified: newVerified } });
+    res.json({ verified: newVerified, username: user.username });
+  });
+};

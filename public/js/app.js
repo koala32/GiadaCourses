@@ -5907,7 +5907,7 @@ setInterval(()=>{
     content += '<div style="font-family:Poppins,sans-serif;font-size:1.6rem;font-weight:800;margin-bottom:8px">GiadaCourses</div>';
     if (isAndroid) {
       content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:24px">Per utilizzare GiadaCourses su Android scarica l\'app ufficiale.</div>';
-      content += '<a href="/uploads/GiadaCourses-beta.apk" download="GiadaCourses.apk" style="display:block;width:100%;background:linear-gradient(135deg,#4ADE80,#22C55E);color:#fff;border:none;border-radius:16px;padding:16px;font-family:Poppins,sans-serif;font-weight:800;font-size:1rem;cursor:pointer;margin-bottom:14px;box-shadow:0 6px 20px rgba(74,222,128,.35);text-decoration:none;text-align:center">Scarica App Android</a>';
+      content += '<a href="/api/download-apk" download="GiadaCourses.apk" style="display:block;width:100%;background:linear-gradient(135deg,#4ADE80,#22C55E);color:#fff;border:none;border-radius:16px;padding:16px;font-family:Poppins,sans-serif;font-weight:800;font-size:1rem;cursor:pointer;margin-bottom:14px;box-shadow:0 6px 20px rgba(74,222,128,.35);text-decoration:none;text-align:center">Scarica App Android</a>';
       content += '<div style="background:rgba(255,255,255,.06);border-radius:14px;padding:16px;text-align:left">';
       content += '<div style="font-weight:700;font-size:.85rem;margin-bottom:12px">Come installare:</div>';
       content += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px"><div style="background:rgba(74,222,128,.3);border-radius:6px;padding:2px 8px;font-weight:800;flex-shrink:0;font-size:.8rem">1</div><div style="font-size:.82rem;opacity:.85">Tocca <strong>Scarica App Android</strong> qui sopra</div></div>';
@@ -5927,7 +5927,7 @@ setInterval(()=>{
       content += '</div>';
     } else {
       content += '<div style="font-size:.9rem;opacity:.7;line-height:1.6;margin-bottom:16px">Apri dal tuo smartphone per scaricare l\'app.</div>';
-      content += '<a href="/uploads/GiadaCourses-beta.apk" download style="display:inline-block;background:linear-gradient(135deg,#4ADE80,#22C55E);color:#fff;padding:12px 28px;border-radius:14px;font-weight:700;text-decoration:none">Scarica per Android</a>';
+      content += '<a href="/api/download-apk" download style="display:inline-block;background:linear-gradient(135deg,#4ADE80,#22C55E);color:#fff;padding:12px 28px;border-radius:14px;font-weight:700;text-decoration:none">Scarica per Android</a>';
     }
     content += '</div>';
     b.innerHTML = content;

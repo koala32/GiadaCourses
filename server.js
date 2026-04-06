@@ -57,11 +57,27 @@ app.use((req, res, next) => {
   const blocked = /\.(db|log|env|git)$/i;
   const reqPath = req.path.toLowerCase();
   if (blocked.test(reqPath) && !reqPath.startsWith('/uploads/')) return res.status(403).json({ error: 'Accesso negato' });
+  // Blocca accesso diretto a file APK
+  if (reqPath.endsWith('.apk')) return res.status(403).json({ error: 'Accesso negato. Vai su giadacourses.duckdns.org' });
   // Blocca accesso a file server
   if (reqPath === '/server.js' || reqPath === '/package.json' || reqPath.startsWith('/routes/') || reqPath.startsWith('/lib/') || reqPath.startsWith('/middleware/')) return res.status(403).json({ error: 'Accesso negato' });
   next();
 });
 app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: 'index.html' }));
+
+// ── Download APK protetto — solo dal sito ──
+app.get('/api/download-apk', (req, res) => {
+  const referer = req.headers.referer || req.headers.origin || '';
+  const validReferer = referer.includes('giadacourses.duckdns.org') || referer.includes('localhost');
+  if (!validReferer) {
+    return res.status(403).send('<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:60px;background:#1E1E3F;color:#fff"><h1>Accesso negato</h1><p>Per scaricare l\'app vai su:</p><a href="https://giadacourses.duckdns.org" style="color:#9C7CFF;font-size:1.2rem">giadacourses.duckdns.org</a></body></html>');
+  }
+  const apkPath = path.join(__dirname, 'uploads', 'GiadaCourses-beta.apk');
+  if (!fs.existsSync(apkPath)) return res.status(404).json({ error: 'APK non trovata' });
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.setHeader('Content-Disposition', 'attachment; filename="GiadaCourses.apk"');
+  res.sendFile(apkPath);
+});
 
 // ── Socket.IO setup ──
 const io = new SocketIO(httpServer, {

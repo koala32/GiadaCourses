@@ -82,7 +82,7 @@ function showPage(p){
   currentPage=p;
   const bn=document.querySelector(`.bnav-item[data-p="${p}"]`);
   if(bn){bn.classList.add('active');bn.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}
-  const R={home:renderHome,exercises:renderExercises,games:renderGames,social:renderSocial,news:renderNews,profile:renderProfile,leaderboard:renderLeaderboard,admin:renderAdmin,superadmin:renderSuperadmin};
+  const R={home:renderHome,exercises:renderExercises,games:renderGames,social:renderSocial,news:renderNews,profile:renderProfile,leaderboard:renderLeaderboard,admin:renderAdmin,superadmin:renderSuperadmin,support:renderSupport};
   if(R[p]){
     const maybePromise=R[p]();
     if(maybePromise&&maybePromise.catch) maybePromise.catch(err=>console.warn('[showPage]',p,err.message));
@@ -100,6 +100,8 @@ function renderNavUser(){
     btn.onclick=openAuth;
     sc.classList.add('hidden');
     if(dmBtn)dmBtn.style.display='none';
+    const supportBtn=document.getElementById('support-nav-btn');
+    if(supportBtn)supportBtn.style.display='none';
     removeExtraBtns();
     return;
   }
@@ -117,6 +119,8 @@ function renderNavUser(){
   }
   btn.onclick=()=>showPage('profile');
   if(dmBtn)dmBtn.style.display='flex';
+  const supportBtn=document.getElementById('support-nav-btn');
+  if(supportBtn)supportBtn.style.display='flex';
   removeExtraBtns();
   if(ME.role==='admin'||ME.role==='superadmin'){
     addExtraBtn('admin','🎨','CMS');
@@ -964,7 +968,7 @@ function renderPostHTML(p,compact=false){
     <div class="post-header">
       <div class="avatar-circle" style="width:44px;height:44px;background:${pickColor(a.username)};cursor:pointer;font-size:1.1rem;overflow:hidden;flex-shrink:0" onclick="viewUser('${a._id}')">${a.avatarUrl?`<img src="${a.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:a.avatar||initials(a.username)}</div>
       <div class="post-meta" style="flex:1;min-width:0">
-        <strong style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(a.username)}${a.role==='admin'?'<span class="role-badge">👩‍🏫</span>':a.role==='superadmin'?'<span class="role-badge">👑</span>':''}</strong>
+        <strong style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHTML(a.username)}${a.role==='admin'?'<span class="role-badge">👩‍🏫</span>':a.role==='superadmin'?'<span class="role-badge">👑</span>':''}${supporterBadge(a)}</strong>
         <span>${timeAgo(p.timestamp)}</span>
       </div>
       ${canDel?`<button onclick="deletePost('${p._id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px;flex-shrink:0">🗑️</button>`:''}
@@ -1404,9 +1408,9 @@ async function renderProfile(){
       <button onclick="deleteAccount()" style="background:rgba(255,107,107,.12);color:var(--coral);border:2px solid var(--coral);border-radius:var(--rs);padding:10px 20px;font-family:var(--fb);font-weight:700;cursor:pointer;width:100%">🗑️ Elimina Account</button>
     </div>
     <div class="card" style="margin-top:16px">
-      <h3>🐛 Segnala un Bug</h3>
-      <p style="font-size:.83rem;color:var(--muted);margin-bottom:12px">Qualcosa non funziona? Segnalalo e lo risolveremo!</p>
-      <button onclick="openBugReport()" style="background:linear-gradient(135deg,var(--purple),var(--blue));color:#fff;border:none;border-radius:var(--rs);padding:10px 20px;font-family:var(--fb);font-weight:700;cursor:pointer;width:100%">🐛 Invia Segnalazione</button>
+      <h3>Supporto</h3>
+      <p style="font-size:.83rem;color:var(--muted);margin-bottom:12px">Hai bisogno di aiuto o vuoi sostenere il progetto?</p>
+      <button onclick="showPage('support')" style="background:linear-gradient(135deg,var(--coral),var(--pink));color:#fff;border:none;border-radius:var(--rs);padding:10px 20px;font-family:var(--fb);font-weight:700;cursor:pointer;width:100%">Vai a Supporto</button>
     </div>
     <div id="profile-highlights"></div>
   `;
@@ -1649,7 +1653,7 @@ async function renderNews(){
       </div>
 
       ${ME?`<div style="margin:16px 0">
-        <button class="btn-primary" onclick="openBugReport()" style="width:100%;background:linear-gradient(135deg,#FF9F43,var(--coral))">Segnala un problema</button>
+        <button class="btn-primary" onclick="showPage('support')" style="width:100%;background:linear-gradient(135deg,var(--coral),var(--pink))">Supporto e Segnalazioni</button>
       </div>`:''}
 
       ${ME&&(ME.role==='admin'||ME.role==='superadmin'||ME.username?.toLowerCase()==='giada')?`
@@ -1683,6 +1687,214 @@ async function refreshTip(){
       card.style.animation='none'; card.offsetHeight; card.style.animation='tipFadeIn .4s ease';
     }
   }catch{}
+}
+
+// ── SUPPORTER MEDAL BADGE HELPER ──
+function supporterBadge(user){
+  if(!user?.supporterMedal) return '';
+  const m = user.supporterMedal;
+  if(m.expiresAt && m.expiresAt < Date.now()) return '';
+  const months = m.months || 1;
+  const color = months >= 6 ? '#FFD700' : months >= 3 ? '#C0C0C0' : '#CD7F32';
+  const label = months >= 12 ? 'Supporter VIP' : 'Supporter '+months+'m';
+  return `<span style="display:inline-flex;align-items:center;gap:2px;background:linear-gradient(135deg,${color}20,${color}10);border:1px solid ${color}40;color:${color};border-radius:10px;padding:1px 6px;font-size:.6rem;font-weight:800;margin-left:4px;vertical-align:middle;white-space:nowrap" title="${label}">&#x2B50; ${label}</span>`;
+}
+
+// ── SUPPORT PAGE ──
+async function renderSupport(){
+  const c=document.getElementById('support-content');
+  if(!c)return;
+  const isAdri = ME?.username?.toLowerCase()==='adri' || ME?.role==='superadmin';
+
+  c.innerHTML=`
+    <div class="section-title" style="margin-bottom:16px">Supporto</div>
+
+    <div class="card" style="text-align:center;background:linear-gradient(135deg,rgba(139,92,246,.06),rgba(236,72,153,.04));border:1.5px solid rgba(139,92,246,.12)">
+      <div style="font-size:2.5rem;margin-bottom:10px">&#x2615;</div>
+      <h3 style="font-family:var(--fh);font-size:1.2rem;margin-bottom:6px;color:var(--dark)">Supporta GiadaCourses</h3>
+      <p style="font-size:.84rem;color:var(--muted);margin-bottom:16px;line-height:1.5">Ti piace GiadaCourses? Aiutaci a crescere con una donazione! Riceverai una medaglia Supporter visibile a tutti.</p>
+      <a href="https://ko-fi.com/m4ct0n1ght" target="_blank" rel="noopener" style="display:block;width:100%;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;border:none;border-radius:var(--rs);padding:14px;font-family:var(--fb);font-weight:700;font-size:1rem;text-decoration:none;text-align:center;box-shadow:0 4px 16px rgba(139,92,246,.25)">&#x2615; Dona su Ko-fi</a>
+      <p style="font-size:.72rem;color:var(--muted);margin-top:10px">Dopo la donazione, contatta Adri per ricevere la tua medaglia!</p>
+    </div>
+
+    <div class="card">
+      <h3 style="font-family:var(--fh);font-size:1.1rem;margin-bottom:12px">&#x1F41B; Segnala un problema</h3>
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px;line-height:1.5">Qualcosa non funziona? Descrivi il problema e il team lo risolverà.</p>
+      <textarea id="support-bug-text" placeholder="Descrivi il problema..." style="width:100%;border:1.5px solid rgba(139,92,246,.12);border-radius:var(--rs);padding:12px;font-family:var(--fb);font-size:.88rem;resize:none;height:80px;outline:none;background:var(--bg);color:var(--text)"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+        <label style="flex-shrink:0;background:rgba(139,92,246,.08);border:1.5px solid rgba(139,92,246,.15);border-radius:var(--rs);padding:9px 14px;cursor:pointer;font-size:.82rem;font-weight:600;color:var(--coral)">
+          &#x1F4F7; Screenshot
+          <input type="file" id="support-bug-file" accept="image/*" style="display:none">
+        </label>
+        <span id="support-file-name" style="flex:1;font-size:.75rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button onclick="submitSupportTicket()" class="btn-primary btn-sm" style="width:auto;flex-shrink:0;padding:9px 18px">Invia</button>
+      </div>
+    </div>
+
+    <div id="my-tickets-section"></div>
+
+    ${isAdri?`
+    <div class="section-title" style="margin-top:24px;margin-bottom:12px">&#x1F6E0;&#xFE0F; Gestione Ticket (Admin)</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button onclick="loadAdminTickets('open')" id="tk-filter-open" class="btn-primary btn-sm" style="flex:1;padding:9px;font-size:.82rem">Aperti</button>
+      <button onclick="loadAdminTickets('resolved')" id="tk-filter-resolved" class="btn-secondary btn-sm" style="flex:1;padding:9px;font-size:.82rem">Risolti</button>
+      <button onclick="loadAdminTickets('all')" id="tk-filter-all" class="btn-secondary btn-sm" style="flex:1;padding:9px;font-size:.82rem">Tutti</button>
+    </div>
+    <div id="admin-tickets-list"><div class="spinner"></div></div>
+
+    <div class="section-title" style="margin-top:24px;margin-bottom:12px">&#x2B50; Assegna Medaglia Supporter</div>
+    <div class="card">
+      <div class="field"><label>Username utente</label><input type="text" id="medal-username" placeholder="username"></div>
+      <div class="field"><label>Durata (mesi)</label>
+        <select id="medal-months" style="width:100%;border:1.5px solid rgba(139,92,246,.12);border-radius:var(--rs);padding:10px;font-family:var(--fb);outline:none;background:#fff">
+          <option value="1">1 mese</option>
+          <option value="2">2 mesi</option>
+          <option value="3">3 mesi</option>
+          <option value="6">6 mesi</option>
+          <option value="12">12 mesi (VIP)</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="assignSupporterMedal()" class="btn-primary btn-sm" style="flex:1;padding:10px">Assegna</button>
+        <button onclick="removeSupporterMedal()" class="btn-secondary btn-sm" style="flex-shrink:0;padding:10px;color:#EF4444">Rimuovi</button>
+      </div>
+    </div>
+    `:''}
+  `;
+
+  // File name display
+  const fileInput=document.getElementById('support-bug-file');
+  if(fileInput) fileInput.onchange=()=>{
+    const nameEl=document.getElementById('support-file-name');
+    if(nameEl) nameEl.textContent=fileInput.files[0]?.name||'';
+  };
+
+  // Load user's own tickets
+  loadMyTickets();
+  // Load admin tickets if Adri
+  if(isAdri) loadAdminTickets('open');
+}
+
+async function submitSupportTicket(){
+  const text=document.getElementById('support-bug-text')?.value?.trim();
+  if(!text){toast('Descrivi il problema','error');return;}
+  try{
+    const fd=new FormData();
+    fd.append('text',text);
+    fd.append('page',currentPage||'unknown');
+    const file=document.getElementById('support-bug-file')?.files[0];
+    if(file) fd.append('file',file);
+    const tok=localStorage.getItem('gc_token');
+    const r=await fetch('/api/bug-report',{method:'POST',headers:{'Authorization':'Bearer '+tok},body:fd});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Errore');
+    document.getElementById('support-bug-text').value='';
+    document.getElementById('support-file-name').textContent='';
+    toast('Segnalazione inviata! Ti risponderemo presto.');
+    loadMyTickets();
+  }catch(e){toast(e.message,'error');}
+}
+
+async function loadMyTickets(){
+  const section=document.getElementById('my-tickets-section');
+  if(!section)return;
+  try{
+    const tickets=await GET('/api/bug-reports?status=all');
+    const mine=tickets.filter(t=>t.userId===ME?._id);
+    if(!mine.length){section.innerHTML='';return;}
+    section.innerHTML=`
+      <div class="section-title" style="margin-top:16px;margin-bottom:10px;font-size:1rem">Le mie segnalazioni</div>
+      ${mine.slice(0,10).map(t=>`
+        <div class="card" style="padding:14px;border-left:3px solid ${t.status==='resolved'?'var(--green)':'var(--coral)'}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:.72rem;font-weight:700;color:${t.status==='resolved'?'var(--green)':'var(--coral)'};text-transform:uppercase">${t.status==='resolved'?'Risolto':'Aperto'}</span>
+            <span style="font-size:.7rem;color:var(--muted)">${timeAgo(t.timestamp)}</span>
+          </div>
+          <div style="font-size:.85rem;line-height:1.4">${escHTML(t.text).substring(0,150)}${t.text.length>150?'...':''}</div>
+          ${t.resolvedBy?`<div style="font-size:.7rem;color:var(--green);margin-top:4px">Risolto da ${escHTML(t.resolvedBy)}</div>`:''}
+        </div>
+      `).join('')}
+    `;
+  }catch{}
+}
+
+async function loadAdminTickets(status){
+  const list=document.getElementById('admin-tickets-list');
+  if(!list)return;
+  // Update filter buttons
+  ['open','resolved','all'].forEach(s=>{
+    const btn=document.getElementById('tk-filter-'+s);
+    if(btn){btn.className=s===status?'btn-primary btn-sm':'btn-secondary btn-sm';btn.style.flex='1';btn.style.padding='9px';btn.style.fontSize='.82rem';}
+  });
+  list.innerHTML='<div class="spinner"></div>';
+  try{
+    const tickets=await GET('/api/bug-reports?status='+status);
+    if(!tickets.length){list.innerHTML='<div class="empty-state" style="padding:20px"><div class="ei">&#x2705;</div><h3>Nessun ticket '+(status==='open'?'aperto':status==='resolved'?'risolto':'')+'</h3></div>';return;}
+    list.innerHTML=tickets.map(t=>`
+      <div class="card" style="padding:14px;margin-bottom:10px;border-left:3px solid ${t.status==='resolved'?'var(--green)':'var(--coral)'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <strong style="font-size:.88rem;cursor:pointer;color:var(--coral)" onclick="viewUser('${t.userId}')">${escHTML(t.username)}</strong>
+            <span style="font-size:.68rem;font-weight:700;padding:2px 6px;border-radius:8px;background:${t.status==='resolved'?'rgba(34,197,94,.1)':'rgba(239,68,68,.1)'};color:${t.status==='resolved'?'var(--green)':'#EF4444'}">${t.status==='resolved'?'RISOLTO':'APERTO'}</span>
+          </div>
+          <span style="font-size:.7rem;color:var(--muted)">${timeAgo(t.timestamp)}</span>
+        </div>
+        <div style="font-size:.84rem;line-height:1.5;margin-bottom:8px">${escHTML(t.text)}</div>
+        ${t.screenshotUrl?`<img src="${t.screenshotUrl}" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="openLightbox('${t.screenshotUrl}')">`:''}
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:8px">Dispositivo: ${escHTML((t.device||'').substring(0,60))} | Pagina: ${escHTML(t.page||'?')}</div>
+        <div style="display:flex;gap:6px">
+          ${t.status==='open'?`
+            <button onclick="resolveTicket('${t._id}')" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px;font-size:.78rem;font-weight:700;cursor:pointer">Risolto</button>
+            <button onclick="openDMWith('${t.userId}')" style="flex:1;background:rgba(139,92,246,.1);color:var(--coral);border:1.5px solid rgba(139,92,246,.15);border-radius:10px;padding:8px;font-size:.78rem;font-weight:700;cursor:pointer">Rispondi in DM</button>
+          `:`
+            <button onclick="reopenTicket('${t._id}')" style="flex:1;background:rgba(251,191,36,.1);color:#D97706;border:1.5px solid rgba(251,191,36,.2);border-radius:10px;padding:8px;font-size:.78rem;font-weight:700;cursor:pointer">Riapri</button>
+          `}
+        </div>
+      </div>
+    `).join('');
+  }catch(e){list.innerHTML='<div class="empty-state"><div class="ei">&#x26A0;&#xFE0F;</div><h3>Errore</h3><p>'+escHTML(e.message)+'</p></div>';}
+}
+
+async function resolveTicket(id){
+  try{
+    await POST('/api/bug-reports/'+id+'/resolve');
+    toast('Ticket chiuso!');
+    loadAdminTickets('open');
+  }catch(e){toast(e.message,'error');}
+}
+async function reopenTicket(id){
+  try{
+    await POST('/api/bug-reports/'+id+'/reopen');
+    toast('Ticket riaperto');
+    loadAdminTickets('resolved');
+  }catch(e){toast(e.message,'error');}
+}
+
+async function assignSupporterMedal(){
+  const username=document.getElementById('medal-username')?.value?.trim();
+  const months=document.getElementById('medal-months')?.value;
+  if(!username){toast('Inserisci lo username','error');return;}
+  try{
+    // Find user by username
+    const users=await GET('/api/users/search?q='+encodeURIComponent(username));
+    const user=users?.find(u=>u.username.toLowerCase()===username.toLowerCase());
+    if(!user){toast('Utente non trovato','error');return;}
+    await POST('/api/supporter/'+user._id,{months:parseInt(months)||1});
+    toast('Medaglia Supporter '+months+' mese/i assegnata a '+username+'!');
+    document.getElementById('medal-username').value='';
+  }catch(e){toast(e.message,'error');}
+}
+async function removeSupporterMedal(){
+  const username=document.getElementById('medal-username')?.value?.trim();
+  if(!username){toast('Inserisci lo username','error');return;}
+  try{
+    const users=await GET('/api/users/search?q='+encodeURIComponent(username));
+    const user=users?.find(u=>u.username.toLowerCase()===username.toLowerCase());
+    if(!user){toast('Utente non trovato','error');return;}
+    await DEL('/api/supporter/'+user._id);
+    toast('Medaglia rimossa da '+username);
+    document.getElementById('medal-username').value='';
+  }catch(e){toast(e.message,'error');}
 }
 
 async function openGiadaSuggestions(){
@@ -2387,7 +2599,7 @@ async function loadLeaderboard(){
         <div class="lb-rank">${rank}</div>
         <div class="avatar-circle" style="width:42px;height:42px;background:${pickColor(u.username)};font-size:1rem;overflow:hidden;flex-shrink:0">${avatarContent}</div>
         <div class="lb-info">
-          <strong>${escHTML(u.username)}${ME&&ME._id===u._id?' <span style="color:var(--coral)">(Tu)</span>':''}${streakBadge}</strong>
+          <strong>${escHTML(u.username)}${ME&&ME._id===u._id?' <span style="color:var(--coral)">(Tu)</span>':''}${streakBadge}${supporterBadge(u)}</strong>
           <span>${u.level||'A1'} · streak ${u.streak||0} · ${(u.badges||[]).slice(0,3).join(' ')}</span>
         </div>
         <div class="lb-xp">${scoreVal}<small style="font-size:.68rem;color:var(--muted);display:block">${scoreLabel}</small></div>

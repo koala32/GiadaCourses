@@ -202,7 +202,7 @@ module.exports = function(app) {
       const uids = [...new Set(posts.map(p => p.userId).filter(Boolean))];
       const users = await db.users.findAsync({ _id: { $in: uids } });
       const uMap = {};
-      users.forEach(u => { uMap[u._id] = { _id: u._id, username: u.username, avatar: u.avatar || '', avatarUrl: u.avatarUrl || '', role: u.role, verified: u.verified }; });
+      users.forEach(u => { uMap[u._id] = { _id: u._id, username: u.username, avatar: u.avatar || '', avatarUrl: u.avatarUrl || '', role: u.role, verified: u.verified, supporterMedal: u.supporterMedal || null }; });
       res.json(posts.map(p => ({ ...p, author: uMap[p.userId] || { _id: p.userId || '', username: 'Utente', role: 'user' } })));
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -219,7 +219,7 @@ module.exports = function(app) {
       review: review||null, rating: rating||null,
     });
     const { passwordHash, ...auth } = req.user;
-    const result = { ...post, author: { _id: auth._id, username: auth.username, avatar: auth.avatar||'', avatarUrl: auth.avatarUrl||'', role: auth.role, verified: auth.verified } };
+    const result = { ...post, author: { _id: auth._id, username: auth.username, avatar: auth.avatar||'', avatarUrl: auth.avatarUrl||'', role: auth.role, verified: auth.verified, supporterMedal: auth.supporterMedal || null } };
     sseBroadcast('new_post', result);
     notifyBellUsers(req.user._id, 'bell_post', { userId: req.user._id, username: req.user.username, postId: post._id, text: (post.text||'').slice(0,50) }).catch(() => {});
     res.json(result);
@@ -309,6 +309,7 @@ module.exports = function(app) {
   });
 
   // ── BUG REPORT ──
+  // ── SUPPORT TICKETS (bug reports evoluti) ──
   app.post('/api/bug-report', requireAuth, upload.single('file'), async (req, res) => {
     try {
       const text = (req.body.text || '').trim();
@@ -316,9 +317,9 @@ module.exports = function(app) {
       let screenshotUrl = null;
       if (req.file) screenshotUrl = '/uploads/' + req.file.filename;
       const report = await db.logs.insertAsync({
-        type: 'bug_report', userId: req.user._id, username: req.user.username,
+        type: 'bug_report', status: 'open', userId: req.user._id, username: req.user.username,
         text, screenshotUrl, device: req.headers['user-agent'] || '',
-        page: req.body.page || '', timestamp: Date.now(),
+        page: req.body.page || '', timestamp: Date.now(), resolvedAt: null, resolvedBy: null,
       });
       const admins = await db.users.findAsync({ $or: [{ role: 'superadmin' }, { username: { $regex: /^adri$/i } }] });
       admins.forEach(a => sseEmit(a._id, 'bug_report', { id: report._id, from: req.user.username, text: text.slice(0, 80), ts: report.timestamp }));
@@ -329,6 +330,45 @@ module.exports = function(app) {
   app.get('/api/bug-reports', requireAuth, async (req, res) => {
     const isAdri = req.user.username?.toLowerCase() === 'adri';
     if (req.user.role !== 'superadmin' && !isAdri) return res.status(403).json({ error: 'Non autorizzato' });
-    res.json((await db.logs.findAsync({ type: 'bug_report' })).sort((a, b) => b.timestamp - a.timestamp));
+    const status = req.query.status || 'all';
+    const query = { type: 'bug_report' };
+    if (status !== 'all') query.status = status;
+    const reports = await db.logs.findAsync(query);
+    res.json(reports.sort((a, b) => b.timestamp - a.timestamp));
+  });
+
+  app.post('/api/bug-reports/:id/resolve', requireAuth, async (req, res) => {
+    const isAdri = req.user.username?.toLowerCase() === 'adri';
+    if (req.user.role !== 'superadmin' && !isAdri) return res.status(403).json({ error: 'Non autorizzato' });
+    await db.logs.updateAsync({ _id: req.params.id, type: 'bug_report' }, { $set: { status: 'resolved', resolvedAt: Date.now(), resolvedBy: req.user.username } });
+    res.json({ ok: true });
+  });
+
+  app.post('/api/bug-reports/:id/reopen', requireAuth, async (req, res) => {
+    const isAdri = req.user.username?.toLowerCase() === 'adri';
+    if (req.user.role !== 'superadmin' && !isAdri) return res.status(403).json({ error: 'Non autorizzato' });
+    await db.logs.updateAsync({ _id: req.params.id, type: 'bug_report' }, { $set: { status: 'open', resolvedAt: null, resolvedBy: null } });
+    res.json({ ok: true });
+  });
+
+  // ── SUPPORTER MEDALS (solo Adri) ──
+  app.post('/api/supporter/:userId', requireAuth, async (req, res) => {
+    const isAdri = req.user.username?.toLowerCase() === 'adri' || req.user.role === 'superadmin';
+    if (!isAdri) return res.status(403).json({ error: 'Solo Adri puo assegnare medaglie' });
+    const { months } = req.body;
+    const m = parseInt(months) || 1;
+    const target = await db.users.findOneAsync({ _id: req.params.userId });
+    if (!target) return res.status(404).json({ error: 'Utente non trovato' });
+    const expiresAt = Date.now() + (m * 30 * 24 * 60 * 60 * 1000);
+    await db.users.updateAsync({ _id: req.params.userId }, { $set: { supporterMedal: { months: m, grantedAt: Date.now(), expiresAt, grantedBy: req.user.username } } });
+    sseEmit(req.params.userId, 'supporter_medal', { months: m });
+    res.json({ ok: true, months: m, expiresAt });
+  });
+
+  app.delete('/api/supporter/:userId', requireAuth, async (req, res) => {
+    const isAdri = req.user.username?.toLowerCase() === 'adri' || req.user.role === 'superadmin';
+    if (!isAdri) return res.status(403).json({ error: 'Solo Adri' });
+    await db.users.updateAsync({ _id: req.params.userId }, { $unset: { supporterMedal: true } });
+    res.json({ ok: true });
   });
 };

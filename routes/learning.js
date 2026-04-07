@@ -259,7 +259,7 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
-      { version: '11.0', date: '2026-04-07', title: 'Restyle & Nuove Feature', changes: ['Restyle completo interfaccia moderna','Password dimenticata con reset via email','Verifica email per nuovi utenti','Notifiche push native per Android APK','Caricamenti media ottimizzati e compressi','Compressione automatica foto prima dell\'upload','Barra di progresso upload visuale','Sicurezza e prestazioni migliorate'] },
+      { version: '11.0', date: '2026-04-07', title: 'Restyle & Nuove Feature', changes: ['Restyle completo interfaccia moderna','Scheda Supporto con donazioni Ko-fi','Sistema ticket segnalazioni con dashboard admin','Medaglie Supporter per i donatori','Onboarding guidato per nuovi utenti','Password dimenticata con reset via email','Verifica email opzionale dal profilo','Caricamenti media ottimizzati con barra progresso','Segna tutti i messaggi come letti','Notifiche push per Android APK'] },
       { version: '10.9', date: '2026-04-06', title: 'App Android e Sicurezza', changes: ['App Android nativa APK disponibile','Chiamate e sfide esclusive per app Android','Rilevamento offline automatico','Foto storie ridimensionamento migliorato','Protezione avanzata contro bot'] },
       { version: '10.8', date: '2026-04-06', title: 'Sicurezza e Dirette', changes: ['Protezione avanzata contro bot e scanner','Dirette LIVE migliorate per host e spettatori','Layout corretto su tutte le pagine','Chiamate e sfide in tempo reale potenziate','Storie con foto ridimensionabili'] },
       { version: '10.7', date: '2026-04-01', title: 'Stabilita e Correzioni', changes: ['Dirette LIVE: annullamento corretto','Storie: una sola canzone alla volta','Guida installazione migliorata per iPhone e Android','Navigazione piu fluida e stabile'] },
@@ -478,6 +478,98 @@ module.exports = function(app, sharedState) {
       if (!hl) return res.status(404).json({ error: 'Non trovato' });
       await db.highlights.removeAsync({ _id: req.params.id });
       res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── DAILY REWARDS + MISSIONS ──
+  const DAILY_MISSIONS = [
+    { id: 'exercise', title: 'Completa un esercizio', icon: '📚', xp: 15, check: 'exercise' },
+    { id: 'post', title: 'Scrivi un post o commento', icon: '💬', xp: 10, check: 'post' },
+    { id: 'social', title: 'Metti like a 3 post', icon: '❤️', xp: 10, check: 'likes', target: 3 },
+    { id: 'story', title: 'Pubblica una storia', icon: '📸', xp: 15, check: 'story' },
+    { id: 'dm', title: 'Invia un messaggio', icon: '✉️', xp: 5, check: 'dm' },
+  ];
+
+  function getTodayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function getStreakXP(streak) {
+    if (streak >= 30) return 50;
+    if (streak >= 14) return 35;
+    if (streak >= 7) return 25;
+    if (streak >= 3) return 15;
+    return 10;
+  }
+
+  app.get('/api/daily/status', requireAuth, async (req, res) => {
+    try {
+      const today = getTodayKey();
+      const userId = req.user._id;
+      let record = await db.daily.findOneAsync({ userId, date: today });
+      if (!record) {
+        // Pick 3 random missions for today
+        const shuffled = DAILY_MISSIONS.slice().sort(() => Math.random() - 0.5);
+        const todayMissions = shuffled.slice(0, 3).map(m => ({ ...m, completed: false }));
+        record = await db.daily.insertAsync({ userId, date: today, loginClaimed: false, missions: todayMissions, createdAt: Date.now() });
+      }
+      const user = await db.users.findOneAsync({ _id: userId });
+      res.json({
+        date: today,
+        loginClaimed: record.loginClaimed,
+        loginXP: getStreakXP(user?.streak || 0),
+        streak: user?.streak || 0,
+        missions: record.missions,
+        allCompleted: record.missions.every(m => m.completed),
+        bonusXP: record.missions.every(m => m.completed) ? 25 : 0,
+      });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/daily/claim-login', requireAuth, async (req, res) => {
+    try {
+      const today = getTodayKey();
+      const userId = req.user._id;
+      let record = await db.daily.findOneAsync({ userId, date: today });
+      if (!record) {
+        const shuffled = DAILY_MISSIONS.slice().sort(() => Math.random() - 0.5);
+        const todayMissions = shuffled.slice(0, 3).map(m => ({ ...m, completed: false }));
+        record = await db.daily.insertAsync({ userId, date: today, loginClaimed: false, missions: todayMissions, createdAt: Date.now() });
+      }
+      if (record.loginClaimed) return res.json({ ok: true, alreadyClaimed: true, xp: 0 });
+      const user = await db.users.findOneAsync({ _id: userId });
+      const xp = getStreakXP(user?.streak || 0);
+      // Update streak
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+      const hadYesterday = await db.daily.findOneAsync({ userId, date: yesterdayKey, loginClaimed: true });
+      const newStreak = hadYesterday ? (user?.streak || 0) + 1 : 1;
+      await db.users.updateAsync({ _id: userId }, { $set: { xp: (user?.xp || 0) + xp, streak: newStreak, lastSeen: Date.now() } });
+      await db.daily.updateAsync({ _id: record._id }, { $set: { loginClaimed: true } });
+      res.json({ ok: true, xp, streak: newStreak, alreadyClaimed: false });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/daily/mission/:missionId/complete', requireAuth, async (req, res) => {
+    try {
+      const today = getTodayKey();
+      const record = await db.daily.findOneAsync({ userId: req.user._id, date: today });
+      if (!record) return res.status(404).json({ error: 'Nessuna missione per oggi' });
+      const mission = record.missions.find(m => m.id === req.params.missionId);
+      if (!mission) return res.status(404).json({ error: 'Missione non trovata' });
+      if (mission.completed) return res.json({ ok: true, alreadyCompleted: true });
+      mission.completed = true;
+      await db.daily.updateAsync({ _id: record._id }, { $set: { missions: record.missions } });
+      // Award XP
+      const user = await db.users.findOneAsync({ _id: req.user._id });
+      await db.users.updateAsync({ _id: req.user._id }, { $set: { xp: (user?.xp || 0) + mission.xp } });
+      // Check if all missions completed — bonus
+      const allDone = record.missions.every(m => m.completed);
+      if (allDone) {
+        await db.users.updateAsync({ _id: req.user._id }, { $set: { xp: (user?.xp || 0) + mission.xp + 25 } });
+      }
+      res.json({ ok: true, xp: mission.xp, allCompleted: allDone, bonusXP: allDone ? 25 : 0 });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 };

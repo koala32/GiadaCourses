@@ -307,6 +307,52 @@ async function doForgotPassword(){
 }
 
 
+// ── ONBOARDING GUIDATO ──
+function showOnboarding(){
+  if(localStorage.getItem('gc_onboarded'))return;
+  const steps=[
+    {icon:'&#x1F3E0;',title:'Benvenuto su GiadaCourses!',text:'Questa e la tua Home. Qui trovi le missioni giornaliere, il feed della community e i tuoi progressi.',page:'home'},
+    {icon:'&#x1F4DA;',title:'Esercizi',text:'Pratica l\'inglese con quiz interattivi per ogni livello (A1-C2). Guadagna XP completandoli!',page:'exercises'},
+    {icon:'&#x1F3AE;',title:'Giochi',text:'Divertiti con giochi educativi per imparare vocaboli e grammatica in modo divertente.',page:'games'},
+    {icon:'&#x1F4AC;',title:'Social',text:'Condividi i tuoi progressi, pubblica post e reel, commenta e interagisci con la community!',page:'social'},
+    {icon:'&#x2764;&#xFE0F;',title:'Supporto',text:'Hai problemi? Segnala un bug o supporta il progetto con una donazione su Ko-fi!',page:'support'},
+    {icon:'&#x1F3C6;',title:'Sei pronto!',text:'Completa esercizi, mantieni il tuo streak quotidiano e scala la classifica. Buon divertimento!',page:null},
+  ];
+  let idx=0;
+  const ov=document.createElement('div');
+  ov.id='onboarding-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(15,13,46,.92);display:flex;align-items:center;justify-content:center;padding:20px;color:#fff;text-align:center';
+  function renderStep(){
+    const s=steps[idx];
+    const isLast=idx===steps.length-1;
+    ov.innerHTML=`<div style="max-width:380px;width:100%;animation:popIn .4s ease">
+      <div style="font-size:3.5rem;margin-bottom:16px">${s.icon}</div>
+      <h2 style="font-family:Poppins,sans-serif;font-size:1.3rem;margin-bottom:10px">${s.title}</h2>
+      <p style="opacity:.75;line-height:1.6;margin-bottom:24px;font-size:.9rem">${s.text}</p>
+      <div style="display:flex;gap:6px;justify-content:center;margin-bottom:20px">${steps.map((_,i)=>'<div style="width:'+(i===idx?'20px':'8px')+';height:8px;border-radius:4px;background:'+(i===idx?'#8B5CF6':'rgba(255,255,255,.2)')+';transition:all .3s"></div>').join('')}</div>
+      <div style="display:flex;gap:10px">
+        ${!isLast?'<button onclick="skipOnboarding()" style="flex:1;background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:13px;font-weight:600;font-size:.88rem;cursor:pointer">Salta</button>':''}
+        <button onclick="${isLast?'finishOnboarding()':'nextOnboardingStep()'}" style="flex:2;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;border:none;border-radius:14px;padding:13px;font-weight:700;font-size:.95rem;cursor:pointer;box-shadow:0 4px 16px rgba(139,92,246,.3)">${isLast?'Inizia!':'Avanti'}</button>
+      </div>
+    </div>`;
+  }
+  window.nextOnboardingStep=function(){
+    idx++;
+    if(idx>=steps.length){finishOnboarding();return;}
+    if(steps[idx].page) showPage(steps[idx].page);
+    renderStep();
+  };
+  window.skipOnboarding=function(){finishOnboarding();};
+  window.finishOnboarding=function(){
+    localStorage.setItem('gc_onboarded','1');
+    ov.remove();
+    showPage('home');
+    toast('Buon divertimento su GiadaCourses!');
+  };
+  document.body.appendChild(ov);
+  renderStep();
+}
+
 // ── EMAIL VERIFICATION SCREEN ──
 function showEmailVerificationScreen(email){
   var overlay = document.createElement('div');
@@ -406,9 +452,11 @@ async function doRegister(){
     renderNavUser();
     startSSE();
     renderHome();
+    // Onboarding per nuovi utenti
+    setTimeout(()=>showOnboarding(), 1500);
     // Reminder gentile per verifica email (non bloccante)
     if(!ME.emailVerified){
-      setTimeout(()=>{ toast('Puoi verificare la tua email dal profilo per reimpostare la password in futuro','info',6000); },4000);
+      setTimeout(()=>{ toast('Puoi verificare la tua email dal profilo per reimpostare la password in futuro','info',6000); },8000);
     }
   }catch(e){
     const msg=e.message||'Errore';
@@ -458,13 +506,14 @@ async function renderHome(){
       <small style="opacity:.85">${pct}% verso ${nextLvl}</small>
     </div>
     <div class="stats-row">
-      <div class="stat-card c1"><div class="stat-val">${done}</div><div class="stat-lbl">🎯 Esercizi</div></div>
-      <div class="stat-card c2"><div class="stat-val">${ME.streak||0}</div><div class="stat-lbl">🔥 Streak</div></div>
-      <div class="stat-card c3" onclick="showFollowList(ME._id,'followers')" style="cursor:pointer"><div class="stat-val">${(ME.followers||[]).length}</div><div class="stat-lbl">👥 Follower</div></div>
+      <div class="stat-card c1"><div class="stat-val">${done}</div><div class="stat-lbl">Esercizi</div></div>
+      <div class="stat-card c2"><div class="stat-val">${ME.streak||0}</div><div class="stat-lbl">Streak</div></div>
+      <div class="stat-card c3" onclick="showFollowList(ME._id,'followers')" style="cursor:pointer"><div class="stat-val">${(ME.followers||[]).length}</div><div class="stat-lbl">Follower</div></div>
     </div>
+    <div id="daily-rewards-card"></div>
     <div class="flex-row mb16">
-      <button class="btn-primary btn-sm" onclick="showPage('exercises')" style="flex:1">📚 Studia</button>
-      <button class="btn-primary btn-sm" onclick="showPage('social')" style="flex:1;background:linear-gradient(135deg,var(--teal),var(--blue))">💬 Social</button>
+      <button class="btn-primary btn-sm" onclick="showPage('exercises')" style="flex:1">Studia</button>
+      <button class="btn-primary btn-sm" onclick="showPage('social')" style="flex:1;background:linear-gradient(135deg,var(--teal),var(--blue))">Social</button>
     </div>
     <div class="section-title">🌊 Ultime attività</div>
     <div id="home-feed"><div class="spinner"></div></div>
@@ -490,6 +539,55 @@ async function renderHome(){
       else feedEl.innerHTML=posts.slice(0,3).map(p=>renderPostHTML(p,true)).join('');
     }
   }catch{}
+  // Load daily rewards
+  loadDailyRewards();
+}
+
+async function loadDailyRewards(){
+  const card=document.getElementById('daily-rewards-card');
+  if(!card||!ME)return;
+  try{
+    const d=await GET('/api/daily/status');
+    const missionsHTML=d.missions.map(m=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;${m.completed?'opacity:.5':''}">
+        <span style="font-size:1.2rem">${m.icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.84rem;font-weight:600;${m.completed?'text-decoration:line-through':''}">${escHTML(m.title)}</div>
+        </div>
+        <span style="font-size:.75rem;font-weight:700;color:${m.completed?'var(--green)':'var(--coral)'}">${m.completed?'Fatto!':'+'+m.xp+' XP'}</span>
+      </div>
+    `).join('');
+    card.innerHTML=`
+      <div class="card" style="border:1.5px solid rgba(139,92,246,.12);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <h3 style="font-family:var(--fh);font-size:1rem;margin:0">Missioni del giorno</h3>
+          ${!d.loginClaimed?`<button onclick="claimDailyLogin()" class="btn-primary btn-sm" style="width:auto;padding:7px 16px;font-size:.78rem;box-shadow:0 2px 8px rgba(139,92,246,.2)">Riscuoti +${d.loginXP} XP</button>`
+          :`<span style="font-size:.72rem;font-weight:700;color:var(--green);background:rgba(34,197,94,.08);padding:3px 10px;border-radius:10px">+${d.loginXP} XP riscosso</span>`}
+        </div>
+        <div style="border-top:1px solid rgba(139,92,246,.06);padding-top:8px">
+          ${missionsHTML}
+        </div>
+        ${d.allCompleted?`<div style="text-align:center;margin-top:10px;padding:8px;background:rgba(34,197,94,.06);border-radius:10px;font-size:.82rem;font-weight:700;color:var(--green)">Tutte le missioni completate! +25 XP bonus</div>`:''}
+      </div>
+    `;
+  }catch(e){card.innerHTML='';}
+}
+
+async function claimDailyLogin(){
+  try{
+    const r=await POST('/api/daily/claim-login');
+    if(r.alreadyClaimed){toast('Già riscosso oggi!','info');return;}
+    ME.xp=(ME.xp||0)+r.xp;
+    ME.streak=r.streak;
+    toast('Login giornaliero! +'+r.xp+' XP | Streak: '+r.streak+' giorni');
+    renderHome();
+  }catch(e){toast(e.message,'error');}
+}
+
+// Auto-complete missions when user performs actions
+async function checkDailyMission(type){
+  if(!ME)return;
+  try{await POST('/api/daily/mission/'+type+'/complete');}catch{}
 }
 
 function renderGuestHome(c){
@@ -696,7 +794,7 @@ async function createReelPost(){
     }
     removeReelMedia();
     if(document.getElementById('new-reel-caption')) document.getElementById('new-reel-caption').value='';
-    toast('Reel pubblicato!');
+    toast('Reel pubblicato!');checkDailyMission('post');
     await loadFeedByType('reel');
   }catch(e){toast(e.message,'error');}
   finally{if(btn){btn.disabled=false;btn.textContent='Pubblica Reel';}}
@@ -1124,7 +1222,7 @@ async function createPost(){
     const ta=document.getElementById('new-post-text');
     if(ta) ta.value='';
     removePostMedia();
-    toast('Post pubblicato! 🌟');
+    toast('Post pubblicato!');checkDailyMission('post');
     await loadFeed();
   }catch(e){
     console.error('createPost error:',e);
@@ -3545,7 +3643,7 @@ async function publishStory(){
     const d = await uploadWithProgress('/api/stories', fd, {'Authorization':'Bearer '+tok});
     window._storyBgTemplate=null;
     closeStoryCreator();
-    toast('Storia pubblicata! ✨');
+    toast('Storia pubblicata!');checkDailyMission('story');
     loadStories();
   }catch(e){toast(e.message,'error');}
 }

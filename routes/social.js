@@ -594,6 +594,72 @@ module.exports = function(app) {
     res.json({ iceServers: servers, iceTransportPolicy: 'all', iceCandidatePoolSize: 5 });
   });
 
+  // ── RANDOM LANGUAGE PARTNER (solo APK Android) ──
+  const partnerQueue = new Map(); // level -> [{userId, username, avatar, avatarUrl, timestamp}]
+
+  app.post('/api/partner/find', requireAuth, async (req, res) => {
+    try {
+      const myLevel = req.user.level || 'A1';
+      const myId = req.user._id;
+      // Compatible levels: same level or ±1
+      const LEVELS = ['A1','A2','B1','B2','C1','C2'];
+      const myIdx = LEVELS.indexOf(myLevel);
+      const compatibleLevels = LEVELS.filter((_, i) => Math.abs(i - myIdx) <= 1);
+
+      // Check if already in queue — remove old entry
+      for (const [lvl, queue] of partnerQueue) {
+        const idx = queue.findIndex(u => u.userId === myId);
+        if (idx !== -1) queue.splice(idx, 1);
+      }
+
+      // Search for a compatible partner in queue
+      let match = null;
+      for (const lvl of compatibleLevels) {
+        const queue = partnerQueue.get(lvl) || [];
+        // Clean expired entries (older than 60s)
+        const now = Date.now();
+        const fresh = queue.filter(u => now - u.timestamp < 60000 && u.userId !== myId);
+        partnerQueue.set(lvl, fresh);
+        if (fresh.length > 0) {
+          match = fresh.shift(); // Take first in queue
+          partnerQueue.set(lvl, fresh);
+          break;
+        }
+      }
+
+      if (match) {
+        // Match found! Notify both users
+        sseEmit(match.userId, 'partner_matched', {
+          partnerId: myId, partnerName: req.user.username,
+          partnerAvatar: req.user.avatar || '', partnerAvatarUrl: req.user.avatarUrl || '',
+          partnerLevel: myLevel
+        });
+        res.json({
+          matched: true, partnerId: match.userId, partnerName: match.username,
+          partnerAvatar: match.avatar, partnerAvatarUrl: match.avatarUrl,
+          partnerLevel: match.level || myLevel
+        });
+      } else {
+        // No match — add to queue and wait
+        if (!partnerQueue.has(myLevel)) partnerQueue.set(myLevel, []);
+        partnerQueue.get(myLevel).push({
+          userId: myId, username: req.user.username,
+          avatar: req.user.avatar || '', avatarUrl: req.user.avatarUrl || '',
+          level: myLevel, timestamp: Date.now()
+        });
+        res.json({ matched: false, queued: true, position: partnerQueue.get(myLevel).length });
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/partner/cancel', requireAuth, (req, res) => {
+    for (const [lvl, queue] of partnerQueue) {
+      const idx = queue.findIndex(u => u.userId === req.user._id);
+      if (idx !== -1) { queue.splice(idx, 1); break; }
+    }
+    res.json({ ok: true });
+  });
+
   // Esporta state per Socket.IO handlers
-  return { activeCalls, activeChallenges, liveStreams, liveViewerSSE, safeQuestions, generateChallengeQuestions };
+  return { activeCalls, activeChallenges, liveStreams, liveViewerSSE, safeQuestions, generateChallengeQuestions, partnerQueue };
 };

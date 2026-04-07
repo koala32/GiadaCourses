@@ -259,7 +259,7 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
-      { version: '11.0', date: '2026-04-07', title: 'Restyle & Nuove Feature', changes: ['Restyle completo interfaccia moderna','Scheda Supporto con donazioni Ko-fi','Sistema ticket segnalazioni con dashboard admin','Medaglie Supporter per i donatori','Onboarding guidato per nuovi utenti','Password dimenticata con reset via email','Verifica email opzionale dal profilo','Caricamenti media ottimizzati con barra progresso','Segna tutti i messaggi come letti','Notifiche push per Android APK'] },
+      { version: '11.0', date: '2026-04-07', title: 'Restyle & Nuove Feature', changes: ['Restyle completo interfaccia moderna','Lezioni strutturate A1-C2 con quiz','25 missioni giornaliere sempre diverse','Language Partner per trovare compagni di studio','Scheda Supporto con donazioni Ko-fi','Medaglie Supporter e sistema ticket','Onboarding guidato per nuovi utenti','Password dimenticata con reset via email','Caricamenti media ottimizzati','Notifiche push per Android APK'] },
       { version: '10.9', date: '2026-04-06', title: 'App Android e Sicurezza', changes: ['App Android nativa APK disponibile','Chiamate e sfide esclusive per app Android','Rilevamento offline automatico','Foto storie ridimensionamento migliorato','Protezione avanzata contro bot'] },
       { version: '10.8', date: '2026-04-06', title: 'Sicurezza e Dirette', changes: ['Protezione avanzata contro bot e scanner','Dirette LIVE migliorate per host e spettatori','Layout corretto su tutte le pagine','Chiamate e sfide in tempo reale potenziate','Storie con foto ridimensionabili'] },
       { version: '10.7', date: '2026-04-01', title: 'Stabilita e Correzioni', changes: ['Dirette LIVE: annullamento corretto','Storie: una sola canzone alla volta','Guida installazione migliorata per iPhone e Android','Navigazione piu fluida e stabile'] },
@@ -483,15 +483,46 @@ module.exports = function(app, sharedState) {
 
   // ── DAILY REWARDS + MISSIONS ──
   const DAILY_MISSIONS = [
-    { id: 'exercise', title: 'Completa un esercizio', icon: '📚', xp: 15, check: 'exercise' },
-    { id: 'post', title: 'Scrivi un post o commento', icon: '💬', xp: 10, check: 'post' },
-    { id: 'social', title: 'Metti like a 3 post', icon: '❤️', xp: 10, check: 'likes', target: 3 },
+    // Social
+    { id: 'post', title: 'Scrivi un post nella community', icon: '💬', xp: 10, check: 'post' },
+    { id: 'comment', title: 'Commenta un post di qualcuno', icon: '🗨️', xp: 10, check: 'comment' },
+    { id: 'like3', title: 'Metti like a 3 post', icon: '❤️', xp: 10, check: 'likes', target: 3 },
+    { id: 'like5', title: 'Metti like a 5 post', icon: '💕', xp: 15, check: 'likes', target: 5 },
+    { id: 'follow', title: 'Segui un nuovo utente', icon: '👥', xp: 10, check: 'follow' },
     { id: 'story', title: 'Pubblica una storia', icon: '📸', xp: 15, check: 'story' },
-    { id: 'dm', title: 'Invia un messaggio', icon: '✉️', xp: 5, check: 'dm' },
+    { id: 'reel', title: 'Pubblica un reel', icon: '🎬', xp: 20, check: 'reel' },
+    // Messaggi
+    { id: 'dm', title: 'Invia un messaggio a qualcuno', icon: '✉️', xp: 5, check: 'dm' },
+    { id: 'dm3', title: 'Invia 3 messaggi in chat', icon: '💌', xp: 10, check: 'dm3', target: 3 },
+    { id: 'voice', title: 'Invia un messaggio vocale', icon: '🎤', xp: 15, check: 'voice' },
+    // Esercizi
+    { id: 'exercise', title: 'Completa un esercizio', icon: '📚', xp: 15, check: 'exercise' },
+    { id: 'exercise2', title: 'Completa 2 esercizi', icon: '📖', xp: 25, check: 'exercise2', target: 2 },
+    { id: 'quiz80', title: 'Ottieni 80%+ in un quiz', icon: '🎯', xp: 20, check: 'quiz80' },
+    { id: 'perfect', title: 'Ottieni 100% in un quiz', icon: '💯', xp: 30, check: 'perfect' },
+    // Apprendimento
+    { id: 'tip', title: 'Leggi un consiglio del giorno', icon: '💡', xp: 5, check: 'tip' },
+    { id: 'explore', title: 'Visita la sezione Esercizi', icon: '🔍', xp: 5, check: 'explore' },
+    { id: 'games', title: 'Gioca a un gioco educativo', icon: '🎮', xp: 15, check: 'games' },
+    { id: 'leaderboard', title: 'Controlla la classifica', icon: '🏆', xp: 5, check: 'leaderboard' },
+    // Creativita
+    { id: 'photo', title: 'Condividi una foto con la community', icon: '📷', xp: 15, check: 'photo' },
+    { id: 'bio', title: 'Aggiorna la tua bio del profilo', icon: '✏️', xp: 10, check: 'bio' },
+    { id: 'avatar', title: 'Cambia il tuo avatar', icon: '🎨', xp: 10, check: 'avatar' },
+    // Streak e costanza
+    { id: 'login3', title: 'Mantieni lo streak per 3 giorni', icon: '🔥', xp: 20, check: 'streak3' },
+    { id: 'login7', title: 'Mantieni lo streak per 7 giorni', icon: '🔥', xp: 35, check: 'streak7' },
+    // Supporto
+    { id: 'support', title: 'Visita la sezione Supporto', icon: '❤️', xp: 5, check: 'support' },
+    { id: 'bug', title: 'Segnala un problema o suggerimento', icon: '🐛', xp: 15, check: 'bug' },
   ];
 
   function getTodayKey() {
     const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function getYesterdayKey() {
+    const d = new Date(); d.setDate(d.getDate() - 1);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
@@ -509,8 +540,14 @@ module.exports = function(app, sharedState) {
       const userId = req.user._id;
       let record = await db.daily.findOneAsync({ userId, date: today });
       if (!record) {
-        // Pick 3 random missions for today
-        const shuffled = DAILY_MISSIONS.slice().sort(() => Math.random() - 0.5);
+        // Avoid yesterday's missions for variety
+        const yesterdayKey = getYesterdayKey();
+        const yesterdayRecord = await db.daily.findOneAsync({ userId, date: yesterdayKey });
+        const yesterdayIds = (yesterdayRecord?.missions || []).map(m => m.id);
+        // Filter out yesterday's missions, then shuffle
+        let pool = DAILY_MISSIONS.filter(m => !yesterdayIds.includes(m.id));
+        if (pool.length < 3) pool = DAILY_MISSIONS.slice(); // fallback if pool too small
+        const shuffled = pool.sort(() => Math.random() - 0.5);
         const todayMissions = shuffled.slice(0, 3).map(m => ({ ...m, completed: false }));
         record = await db.daily.insertAsync({ userId, date: today, loginClaimed: false, missions: todayMissions, createdAt: Date.now() });
       }
@@ -533,7 +570,12 @@ module.exports = function(app, sharedState) {
       const userId = req.user._id;
       let record = await db.daily.findOneAsync({ userId, date: today });
       if (!record) {
-        const shuffled = DAILY_MISSIONS.slice().sort(() => Math.random() - 0.5);
+        const yk = getYesterdayKey();
+        const yr = await db.daily.findOneAsync({ userId, date: yk });
+        const yids = (yr?.missions || []).map(m => m.id);
+        let pool = DAILY_MISSIONS.filter(m => !yids.includes(m.id));
+        if (pool.length < 3) pool = DAILY_MISSIONS.slice();
+        const shuffled = pool.sort(() => Math.random() - 0.5);
         const todayMissions = shuffled.slice(0, 3).map(m => ({ ...m, completed: false }));
         record = await db.daily.insertAsync({ userId, date: today, loginClaimed: false, missions: todayMissions, createdAt: Date.now() });
       }
@@ -570,6 +612,163 @@ module.exports = function(app, sharedState) {
         await db.users.updateAsync({ _id: req.user._id }, { $set: { xp: (user?.xp || 0) + mission.xp + 25 } });
       }
       res.json({ ok: true, xp: mission.xp, allCompleted: allDone, bonusXP: allDone ? 25 : 0 });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── LEZIONI STRUTTURATE ──
+  const LESSON_PATHS = {
+    A1: [
+      { id: 'a1-01', title: 'Greetings & Introductions', desc: 'Hello, goodbye, how are you', xp: 20, content: 'Learn basic greetings: Hello, Hi, Good morning, Good afternoon, Good evening, Goodbye, See you later. Practice: "Hi, my name is ___. Nice to meet you!"', quiz: [
+        { q: 'How do you say "Ciao" in English?', opts: ['Hello','Goodbye','Thanks','Sorry'], correct: 0 },
+        { q: '"Good morning" means:', opts: ['Buona sera','Buon pomeriggio','Buongiorno','Buona notte'], correct: 2 },
+        { q: 'Complete: "Nice to ___ you!"', opts: ['see','meet','know','have'], correct: 1 },
+      ]},
+      { id: 'a1-02', title: 'Numbers 1-20', desc: 'Count from one to twenty', xp: 20, content: 'One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Eleven, Twelve, Thirteen, Fourteen, Fifteen, Sixteen, Seventeen, Eighteen, Nineteen, Twenty.', quiz: [
+        { q: 'What number is "thirteen"?', opts: ['3','13','30','31'], correct: 1 },
+        { q: '"Seven" in italiano:', opts: ['Sei','Sette','Cinque','Otto'], correct: 1 },
+        { q: 'How do you say "15" in English?', opts: ['Fifty','Five','Fifteen','Fiveteen'], correct: 2 },
+      ]},
+      { id: 'a1-03', title: 'Colors', desc: 'Red, blue, green and more', xp: 20, content: 'Red (rosso), Blue (blu), Green (verde), Yellow (giallo), Black (nero), White (bianco), Orange (arancione), Pink (rosa), Purple (viola), Brown (marrone).', quiz: [
+        { q: '"Verde" in English:', opts: ['Blue','Red','Green','Yellow'], correct: 2 },
+        { q: 'What color is the sky?', opts: ['Red','Green','Blue','Black'], correct: 2 },
+        { q: '"Purple" means:', opts: ['Rosa','Viola','Marrone','Arancione'], correct: 1 },
+      ]},
+      { id: 'a1-04', title: 'Family Members', desc: 'Mother, father, sister, brother', xp: 25, content: 'Mother/Mom, Father/Dad, Sister, Brother, Grandmother/Grandma, Grandfather/Grandpa, Uncle, Aunt, Cousin, Son, Daughter.', quiz: [
+        { q: '"Fratello" in English:', opts: ['Sister','Father','Brother','Uncle'], correct: 2 },
+        { q: '"Grandmother" means:', opts: ['Zia','Nonna','Madre','Cugina'], correct: 1 },
+        { q: 'Your mother\'s sister is your:', opts: ['Cousin','Uncle','Aunt','Sister'], correct: 2 },
+      ]},
+      { id: 'a1-05', title: 'Days of the Week', desc: 'Monday through Sunday', xp: 20, content: 'Monday (lunedi), Tuesday (martedi), Wednesday (mercoledi), Thursday (giovedi), Friday (venerdi), Saturday (sabato), Sunday (domenica). "What day is it today?"', quiz: [
+        { q: '"Mercoledi" in English:', opts: ['Monday','Wednesday','Thursday','Tuesday'], correct: 1 },
+        { q: 'The weekend days are:', opts: ['Monday-Tuesday','Friday-Saturday','Saturday-Sunday','Thursday-Friday'], correct: 2 },
+        { q: 'Which day comes after Thursday?', opts: ['Wednesday','Friday','Saturday','Tuesday'], correct: 1 },
+      ]},
+    ],
+    A2: [
+      { id: 'a2-01', title: 'Present Simple', desc: 'I work, she plays, they study', xp: 25, content: 'Use Present Simple for habits and routines. Add -s/-es for he/she/it. "I work every day. She plays tennis. They study English."', quiz: [
+        { q: 'She ___ to school every day.', opts: ['go','goes','going','gone'], correct: 1 },
+        { q: 'They ___ English on Monday.', opts: ['studies','study','studying','studied'], correct: 1 },
+        { q: 'Complete: "He ___ coffee every morning."', opts: ['drink','drinks','drinking','drank'], correct: 1 },
+      ]},
+      { id: 'a2-02', title: 'Past Simple Regular', desc: 'I walked, she played, they studied', xp: 25, content: 'Add -ed for regular past tense. "I walked to school. She played tennis. They studied hard." Exceptions: study→studied, stop→stopped.', quiz: [
+        { q: 'Past of "play":', opts: ['played','plaied','plaid','playing'], correct: 0 },
+        { q: 'She ___ the piano yesterday.', opts: ['play','plays','played','playing'], correct: 2 },
+        { q: 'Past of "study":', opts: ['studyed','studied','studed','studying'], correct: 1 },
+      ]},
+      { id: 'a2-03', title: 'Food & Drinks', desc: 'Ordering at a restaurant', xp: 25, content: '"Can I have a coffee, please?" "I\'d like a pizza." "The bill, please." Menu items: starter, main course, dessert, drink.', quiz: [
+        { q: '"Il conto, per favore" in English:', opts: ['The menu, please','The bill, please','The food, please','The table, please'], correct: 1 },
+        { q: '"I\'d like" means:', opts: ['Io sono','Io vorrei','Io ho','Io faccio'], correct: 1 },
+        { q: 'A "starter" is:', opts: ['Un dessert','Un antipasto','Una bevanda','Un contorno'], correct: 1 },
+      ]},
+      { id: 'a2-04', title: 'Prepositions of Place', desc: 'In, on, at, under, next to', xp: 25, content: 'IN: inside (in the box). ON: surface (on the table). AT: point (at school). UNDER: below (under the bed). NEXT TO: beside (next to the park).', quiz: [
+        { q: 'The book is ___ the table.', opts: ['in','at','on','under'], correct: 2 },
+        { q: 'She is ___ school.', opts: ['in','on','at','next'], correct: 2 },
+        { q: 'The cat is ___ the bed.', opts: ['on','in','at','under'], correct: 3 },
+      ]},
+    ],
+    B1: [
+      { id: 'b1-01', title: 'Present Perfect', desc: 'I have been, she has done', xp: 30, content: 'have/has + past participle. Use for experiences and recent actions. "I have visited Paris." "She has finished her homework." "Have you ever been to London?"', quiz: [
+        { q: 'I ___ never ___ sushi.', opts: ['have/eat','have/ate','have/eaten','has/eaten'], correct: 2 },
+        { q: 'She ___ just ___ home.', opts: ['have/arrived','has/arrived','has/arrive','have/arrive'], correct: 1 },
+        { q: '___ you ever ___ to Japan?', opts: ['Have/been','Has/been','Have/be','Did/been'], correct: 0 },
+      ]},
+      { id: 'b1-02', title: 'Conditionals (First)', desc: 'If it rains, I will stay home', xp: 30, content: 'If + present simple, will + infinitive. For real possibilities. "If it rains, I will take an umbrella." "If you study, you will pass the exam."', quiz: [
+        { q: 'If she ___, I will call her.', opts: ['will come','comes','come','coming'], correct: 1 },
+        { q: 'If it ___ sunny, we ___ go to the beach.', opts: ['is/will','will be/will','is/are','was/will'], correct: 0 },
+        { q: 'Complete: "If you ___ hard, you ___ succeed."', opts: ['work/will','will work/will','works/will','work/would'], correct: 0 },
+      ]},
+      { id: 'b1-03', title: 'Phrasal Verbs Common', desc: 'Look up, give up, turn on', xp: 30, content: 'look up = cercare, give up = arrendersi, turn on = accendere, turn off = spegnere, put on = indossare, take off = togliere, get up = alzarsi, sit down = sedersi.', quiz: [
+        { q: '"Give up" means:', opts: ['Dare','Arrendersi','Regalare','Alzarsi'], correct: 1 },
+        { q: 'Please ___ the light.', opts: ['turn on','turn up','turn in','turn at'], correct: 0 },
+        { q: '"Look up" a word means:', opts: ['Guardare su','Cercare','Guardare giu','Alzarsi'], correct: 1 },
+      ]},
+    ],
+    B2: [
+      { id: 'b2-01', title: 'Reported Speech', desc: 'She said that she was tired', xp: 35, content: 'Direct: "I am tired." Reported: She said (that) she was tired. Tense shifts: am→was, will→would, can→could, have→had.', quiz: [
+        { q: '"I will come" → He said he ___ come.', opts: ['will','would','can','shall'], correct: 1 },
+        { q: '"I am happy" → She said she ___ happy.', opts: ['is','was','were','be'], correct: 1 },
+        { q: '"I can swim" → He said he ___ swim.', opts: ['can','could','would','should'], correct: 1 },
+      ]},
+      { id: 'b2-02', title: 'Passive Voice', desc: 'The book was written by...', xp: 35, content: 'Subject + be + past participle. "The letter was written by John." "English is spoken worldwide." "The cake has been eaten."', quiz: [
+        { q: 'The window ___ by the children.', opts: ['broke','was broken','broken','breaking'], correct: 1 },
+        { q: 'English ___ in many countries.', opts: ['speaks','is spoken','is speaking','spoke'], correct: 1 },
+        { q: 'The homework ___ already ___.', opts: ['has/done','has/been done','is/doing','was/do'], correct: 1 },
+      ]},
+    ],
+    C1: [
+      { id: 'c1-01', title: 'Advanced Conditionals', desc: 'Mixed conditionals and wishes', xp: 40, content: 'Mixed: "If I had studied harder, I would be a doctor now." Wishes: "I wish I had more time." "If only I could fly."', quiz: [
+        { q: 'If I ___ you, I would apologize.', opts: ['am','was','were','be'], correct: 2 },
+        { q: 'I wish I ___ speak French.', opts: ['can','could','will','would'], correct: 1 },
+        { q: 'If she ___ harder, she would have passed.', opts: ['studied','had studied','studies','would study'], correct: 1 },
+      ]},
+    ],
+    C2: [
+      { id: 'c2-01', title: 'Nuances & Idioms', desc: 'Break a leg, piece of cake', xp: 45, content: '"Break a leg" = good luck. "Piece of cake" = very easy. "Hit the nail on the head" = exactly right. "Under the weather" = feeling sick.', quiz: [
+        { q: '"Piece of cake" means:', opts: ['A dessert','Very easy','Very hard','A recipe'], correct: 1 },
+        { q: '"Under the weather" means:', opts: ['Outside','Cold','Feeling sick','Raining'], correct: 2 },
+        { q: '"Break a leg" is said to wish someone:', opts: ['Bad luck','Good luck','A broken leg','To run'], correct: 1 },
+      ]},
+    ],
+  };
+
+  app.get('/api/lessons', requireAuth, async (req, res) => {
+    const level = req.query.level || req.user.level || 'A1';
+    const lessons = LESSON_PATHS[level] || [];
+    const progress = req.user.progress || {};
+    const lessonsWithProgress = lessons.map(l => ({
+      id: l.id, title: l.title, desc: l.desc, xp: l.xp,
+      completed: !!progress[l.id], score: progress[l.id]?.score || 0,
+      quizLength: l.quiz.length,
+    }));
+    res.json({ level, lessons: lessonsWithProgress, totalLessons: lessons.length, completedCount: lessonsWithProgress.filter(l => l.completed).length });
+  });
+
+  app.get('/api/lessons/:lessonId', requireAuth, (req, res) => {
+    for (const [level, lessons] of Object.entries(LESSON_PATHS)) {
+      const lesson = lessons.find(l => l.id === req.params.lessonId);
+      if (lesson) {
+        const progress = req.user.progress || {};
+        return res.json({
+          ...lesson,
+          level,
+          completed: !!progress[lesson.id],
+          prevScore: progress[lesson.id]?.score || 0,
+          quiz: lesson.quiz.map(q => ({ q: q.q, opts: q.opts })), // Hide correct answers
+        });
+      }
+    }
+    res.status(404).json({ error: 'Lezione non trovata' });
+  });
+
+  app.post('/api/lessons/:lessonId/submit', requireAuth, async (req, res) => {
+    try {
+      const { answers } = req.body;
+      if (!answers || !Array.isArray(answers)) return res.status(400).json({ error: 'Risposte mancanti' });
+      let lesson = null, lessonLevel = null;
+      for (const [level, lessons] of Object.entries(LESSON_PATHS)) {
+        const found = lessons.find(l => l.id === req.params.lessonId);
+        if (found) { lesson = found; lessonLevel = level; break; }
+      }
+      if (!lesson) return res.status(404).json({ error: 'Lezione non trovata' });
+      // Score quiz
+      let correct = 0;
+      const results = lesson.quiz.map((q, i) => {
+        const isCorrect = answers[i] === q.correct;
+        if (isCorrect) correct++;
+        return { correct: isCorrect, correctAnswer: q.correct, userAnswer: answers[i] };
+      });
+      const score = Math.round((correct / lesson.quiz.length) * 100);
+      const passed = score >= 60;
+      // Update progress
+      const user = await db.users.findOneAsync({ _id: req.user._id });
+      const progress = user.progress || {};
+      const prevCompleted = !!progress[lesson.id];
+      if (passed) {
+        progress[lesson.id] = { score, completedAt: Date.now() };
+        const xpGain = prevCompleted ? 0 : lesson.xp; // XP solo prima volta
+        await db.users.updateAsync({ _id: req.user._id }, { $set: { progress, xp: (user.xp || 0) + xpGain } });
+      }
+      res.json({ score, passed, correct, total: lesson.quiz.length, results, xpGained: passed && !prevCompleted ? lesson.xp : 0 });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 };

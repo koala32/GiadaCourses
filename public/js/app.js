@@ -87,6 +87,13 @@ function showPage(p){
     const maybePromise=R[p]();
     if(maybePromise&&maybePromise.catch) maybePromise.catch(err=>console.warn('[showPage]',p,err.message));
   }
+  // Mission tracking per visite pagina
+  if(ME){
+    if(p==='exercises') checkDailyMission('explore');
+    if(p==='leaderboard') checkDailyMission('leaderboard');
+    if(p==='support') checkDailyMission('support');
+    if(p==='games') checkDailyMission('games');
+  }
 }
 
 function renderNavUser(){
@@ -637,6 +644,15 @@ async function renderSocial(){
       <button onclick="startLive()" style="background:linear-gradient(135deg,#FF3B30,#FF6B6B);color:#fff;border:none;border-radius:14px;padding:10px 18px;font-family:var(--fb);font-weight:700;font-size:.82rem;cursor:pointer;flex-shrink:0">Inizia</button>
     </div>`:''}
 
+    ${IS_NATIVE_APK&&ME?`<div class="card" style="display:flex;align-items:center;gap:14px;padding:14px;border:1.5px solid rgba(34,197,94,.15);background:rgba(34,197,94,.03)">
+      <div style="font-size:1.8rem">🌍</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.88rem">Language Partner</div>
+        <div style="font-size:.74rem;color:var(--muted)">Trova qualcuno con cui praticare inglese</div>
+      </div>
+      <button id="partner-find-btn" onclick="findLanguagePartner()" style="background:linear-gradient(135deg,#22C55E,#16A34A);color:#fff;border:none;border-radius:12px;padding:10px 16px;font-family:var(--fb);font-weight:700;font-size:.8rem;cursor:pointer;flex-shrink:0">Trova Partner</button>
+    </div>`:''}
+
     <!-- ── SOCIAL TABS ── -->
     <div class="social-tabs" id="social-tabs">
       <button class="social-tab${tab==='thread'?' active':''}" data-tab="thread" onclick="switchSocialTab('thread')">Thread</button>
@@ -1125,6 +1141,7 @@ async function likePost(pid,btn){
     btn.className='action-btn'+(liked?' liked':'');
     btn.innerHTML=`<span class="like-icon">${liked?'❤️':'🤍'}</span> ${r.likes}`;
     if(liked){
+      checkDailyMission('like3');checkDailyMission('like5');
       // Floating heart animation
       const rect=btn.getBoundingClientRect();
       const h=document.createElement('div');
@@ -1147,7 +1164,7 @@ async function addComment(pid){
     const c=await POST('/api/posts/'+pid+'/comments',{text});
     inp.value='';
     await loadPostComments(pid);
-    toast('Commento aggiunto! 💬');
+    toast('Commento aggiunto! 💬');checkDailyMission('comment');
   }catch(e){toast(e.message,'error');}
 }
 
@@ -1249,8 +1266,17 @@ async function deletePost(pid){
 async function renderExercises(){
   const c=document.getElementById('exercises-content');
   if(currentExercise){renderQuiz(c);return;}
+  if(window._showLessons){renderLessonsPage(c);return;}
   c.innerHTML=`<div class="section-title">📚 Esercizi</div>
-    ${!ME?`<div class="guest-bar"><p>⚡ Registrati per salvare i progressi e guadagnare XP!</p><button onclick="openAuth()">Registrati</button></div>`:''}
+    ${!ME?`<div class="guest-bar"><p>Registrati per salvare i progressi e guadagnare XP!</p><button onclick="openAuth()">Registrati</button></div>`:''}
+    ${ME?`<div class="card" onclick="window._showLessons=true;renderExercises()" style="cursor:pointer;display:flex;align-items:center;gap:14px;border-left:3px solid var(--green);padding:16px">
+      <div style="font-size:2rem">🎓</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:.95rem">Lezioni Strutturate</div>
+        <div style="font-size:.78rem;color:var(--muted)">Percorsi step-by-step per ogni livello (A1-C2)</div>
+      </div>
+      <div style="color:var(--coral);font-size:1.2rem">→</div>
+    </div>`:''}
     <div class="level-tabs" id="ltabs"></div>
     <div id="ex-list"><div class="spinner"></div></div>`;
   const levels=['Tutti',...LEVELS];
@@ -1290,6 +1316,154 @@ async function renderExercises(){
 }
 
 function filterLevel(l){currentLevel=l;renderExercises();}
+
+// ── LEZIONI STRUTTURATE ──
+let _lessonLevel = null;
+async function renderLessonsPage(c){
+  _lessonLevel = _lessonLevel || (ME?.level || 'A1');
+  c.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button onclick="window._showLessons=false;renderExercises()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text)">←</button>
+      <div class="section-title" style="margin:0;flex:1">Lezioni Strutturate</div>
+    </div>
+    <div class="level-tabs" id="lesson-ltabs"></div>
+    <div id="lessons-list"><div class="spinner"></div></div>`;
+  const ltabs=document.getElementById('lesson-ltabs');
+  ltabs.innerHTML=LEVELS.map(l=>`<button class="level-tab${l===_lessonLevel?' active':''}" onclick="_lessonLevel='${l}';renderLessonsPage(document.getElementById('exercises-content'))">${l}</button>`).join('');
+  try{
+    const d=await GET('/api/lessons?level='+_lessonLevel);
+    const list=document.getElementById('lessons-list');
+    if(!list)return;
+    if(!d.lessons.length){list.innerHTML='<div class="empty-state"><div class="ei">📖</div><h3>Nessuna lezione per '+_lessonLevel+' ancora</h3></div>';return;}
+    list.innerHTML=`
+      <div style="margin-bottom:14px;font-size:.85rem;color:var(--muted)">Progresso: ${d.completedCount}/${d.totalLessons} lezioni completate</div>
+      <div class="xp-bar-wrap" style="background:rgba(139,92,246,.1);height:8px;margin-bottom:18px"><div class="xp-bar" style="width:${d.totalLessons?Math.round(d.completedCount/d.totalLessons*100):0}%;background:linear-gradient(90deg,#8B5CF6,#EC4899)"></div></div>
+      ${d.lessons.map((l,i)=>`
+        <div class="ex-item${l.completed?' done':''}" onclick="openLesson('${l.id}')" style="border-left-color:${l.completed?'var(--green)':'var(--coral)'}">
+          <div style="width:36px;height:36px;border-radius:50%;background:${l.completed?'var(--green)':'var(--coral)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.85rem;flex-shrink:0">${i+1}</div>
+          <div class="ex-info">
+            <div class="ex-title">${escHTML(l.title)}</div>
+            <div class="ex-desc">${escHTML(l.desc)}</div>
+            ${l.completed?`<span class="chip green" style="margin-top:4px">Completato ${l.score}%</span>`:''}
+          </div>
+          ${l.completed?'<span style="font-size:1.3rem">✅</span>':`<span class="ex-pts">+${l.xp}XP</span>`}
+        </div>
+      `).join('')}
+    `;
+  }catch(e){document.getElementById('lessons-list').innerHTML='<div class="empty-state"><div class="ei">&#x26A0;</div><h3>'+escHTML(e.message)+'</h3></div>';}
+}
+
+async function openLesson(lessonId){
+  const c=document.getElementById('exercises-content');
+  c.innerHTML='<div class="spinner" style="padding:40px 0"></div>';
+  try{
+    const lesson=await GET('/api/lessons/'+lessonId);
+    c.innerHTML=`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button onclick="renderLessonsPage(document.getElementById('exercises-content'))" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text)">←</button>
+        <div style="flex:1"><div class="section-title" style="margin:0;font-size:1.1rem">${escHTML(lesson.title)}</div><span class="chip" style="margin-top:4px">${lesson.level}</span></div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h3 style="font-family:var(--fh);font-size:1rem;margin-bottom:10px">📖 Lezione</h3>
+        <div style="font-size:.88rem;line-height:1.65;color:var(--text)">${escHTML(lesson.content)}</div>
+      </div>
+      <div class="card">
+        <h3 style="font-family:var(--fh);font-size:1rem;margin-bottom:14px">Quiz (${lesson.quiz.length} domande)</h3>
+        <div id="lesson-quiz">
+          ${lesson.quiz.map((q,i)=>`
+            <div style="margin-bottom:18px;padding-bottom:14px;${i<lesson.quiz.length-1?'border-bottom:1px solid rgba(139,92,246,.06)':''}">
+              <div style="font-weight:700;font-size:.88rem;margin-bottom:10px">${i+1}. ${escHTML(q.q)}</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                ${q.opts.map((opt,oi)=>`<button class="quiz-opt lesson-opt" data-q="${i}" data-o="${oi}" onclick="selectLessonOpt(this,${i},${oi})">${escHTML(opt)}</button>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <button onclick="submitLesson('${lessonId}',${lesson.quiz.length})" class="btn-primary" style="margin-top:8px">Verifica risposte</button>
+        <div id="lesson-result"></div>
+      </div>`;
+    window._lessonAnswers=new Array(lesson.quiz.length).fill(-1);
+  }catch(e){c.innerHTML='<div class="empty-state"><div class="ei">&#x26A0;</div><h3>'+escHTML(e.message)+'</h3></div>';}
+}
+
+function selectLessonOpt(btn,qIdx,optIdx){
+  window._lessonAnswers[qIdx]=optIdx;
+  document.querySelectorAll(`.lesson-opt[data-q="${qIdx}"]`).forEach(b=>{b.style.borderColor='rgba(139,92,246,.1)';b.style.background='#fff';});
+  btn.style.borderColor='var(--coral)';
+  btn.style.background='rgba(139,92,246,.06)';
+}
+
+async function submitLesson(lessonId,total){
+  const answers=window._lessonAnswers||[];
+  if(answers.some(a=>a===-1)){toast('Rispondi a tutte le domande!','error');return;}
+  try{
+    const r=await POST('/api/lessons/'+lessonId+'/submit',{answers});
+    const el=document.getElementById('lesson-result');
+    // Highlight correct/wrong
+    r.results.forEach((res,i)=>{
+      document.querySelectorAll(`.lesson-opt[data-q="${i}"]`).forEach(b=>{
+        const oi=parseInt(b.dataset.o);
+        if(oi===res.correctAnswer) b.classList.add('correct');
+        else if(oi===res.userAnswer && !res.correct) b.classList.add('wrong');
+        b.disabled=true;b.style.pointerEvents='none';
+      });
+    });
+    el.innerHTML=`
+      <div style="text-align:center;margin-top:20px;padding:20px;background:${r.passed?'rgba(34,197,94,.06)':'rgba(239,68,68,.06)'};border-radius:var(--rs)">
+        <div style="font-size:2.5rem;margin-bottom:8px">${r.passed?'🎉':'😔'}</div>
+        <div style="font-family:var(--fh);font-size:1.3rem;margin-bottom:4px">${r.score}%</div>
+        <div style="font-size:.85rem;color:var(--muted);margin-bottom:10px">${r.correct}/${r.total} corrette${r.xpGained?' — +'+r.xpGained+' XP!':''}</div>
+        <div style="font-size:.88rem;font-weight:700;color:${r.passed?'var(--green)':'#EF4444'}">${r.passed?'Lezione superata!':'Devi ottenere almeno 60% per superare'}</div>
+        <button onclick="renderLessonsPage(document.getElementById('exercises-content'))" class="btn-primary btn-sm" style="width:auto;padding:10px 24px;margin-top:14px">${r.passed?'Prossima lezione':'Riprova'}</button>
+      </div>`;
+    if(r.passed&&r.xpGained){ME.xp=(ME.xp||0)+r.xpGained;checkDailyMission('exercise');}
+  }catch(e){toast(e.message,'error');}
+}
+
+// ── RANDOM LANGUAGE PARTNER (solo APK Android) ──
+let _partnerSearching=false;
+let _partnerPollInterval=null;
+
+async function findLanguagePartner(){
+  if(!IS_NATIVE_APK){toast('Disponibile solo nell\'app Android','info');return;}
+  if(_partnerSearching){cancelPartnerSearch();return;}
+  _partnerSearching=true;
+  const btn=document.getElementById('partner-find-btn');
+  if(btn){btn.textContent='Ricerca in corso...';btn.style.background='rgba(139,92,246,.15)';}
+  try{
+    const r=await POST('/api/partner/find');
+    if(r.matched){
+      _partnerSearching=false;
+      if(btn){btn.textContent='Trova Partner';btn.style.background='';}
+      toast('Partner trovato: '+r.partnerName+'! Apro la chat...','success',3000);
+      setTimeout(()=>openDMWith(r.partnerId),1000);
+    } else {
+      // In coda — poll ogni 5s per max 60s
+      toast('Sei in coda! Cerco un partner del tuo livello...','info',4000);
+      let polls=0;
+      _partnerPollInterval=setInterval(async()=>{
+        polls++;
+        if(polls>12||!_partnerSearching){cancelPartnerSearch();return;}
+        try{
+          const r2=await POST('/api/partner/find');
+          if(r2.matched){
+            cancelPartnerSearch();
+            toast('Partner trovato: '+r2.partnerName+'!','success',3000);
+            setTimeout(()=>openDMWith(r2.partnerId),1000);
+          }
+        }catch{}
+      },5000);
+    }
+  }catch(e){_partnerSearching=false;toast(e.message,'error');if(btn){btn.textContent='Trova Partner';btn.style.background='';}}
+}
+
+function cancelPartnerSearch(){
+  _partnerSearching=false;
+  clearInterval(_partnerPollInterval);
+  POST('/api/partner/cancel').catch(()=>{});
+  const btn=document.getElementById('partner-find-btn');
+  if(btn){btn.textContent='Trova Partner';btn.style.background='';}
+}
 
 function startExercise(exId){
   const exercises=window._exercises||[];
@@ -1706,6 +1880,7 @@ async function toggleFollow(uid,btn){
       if(ME.notifyUsers) ME.notifyUsers=ME.notifyUsers.filter(id=>id!==uid);
     }
     toast(r.following?'Ora segui questo utente':'Non segui piu');
+    if(r.following) checkDailyMission('follow');
     // Riapri profilo per aggiornare stato campanellina
     if(r.following || !r.following) { closeUserModal(); setTimeout(()=>openUserProfile(uid), 200); }
   }catch(e){toast(e.message,'error');}
@@ -4307,6 +4482,7 @@ async function sendDM(){
   try{
     await POST('/api/messages/'+dmCurrentUser._id,{text});
     appendDMMessage({fromId:ME._id,text,timestamp:Date.now()});
+    checkDailyMission('dm');checkDailyMission('dm3');
   }catch(e){toast(e.message,'error');}
 }
 
@@ -5699,6 +5875,15 @@ function startSSE(){
   onEvent('challenge_finished', d => {
     if (!challengeState || challengeState.id !== d.challengeId) return;
     showChallengeResult(d.result);
+  }, true);
+
+  // ── Language Partner match ──
+  onEvent('partner_matched', d => {
+    cancelPartnerSearch();
+    playNotificationSound();
+    toast('Language Partner trovato: '+escHTML(d.partnerName)+'!','success',4000);
+    showPushNotif('Partner trovato!', d.partnerName+' vuole praticare con te');
+    setTimeout(()=>openDMWith(d.partnerId),1500);
   }, true);
 
   // ── Campanellina: notifiche prioritarie per utenti con bell attiva ──

@@ -33,41 +33,27 @@ fi
 echo "[..] Sincronizzazione web assets..."
 npx cap sync android 2>&1 | tail -3
 
-# ── Genera icone Android con il logo GC ──
-echo "[..] Generazione icone app..."
-python3 << 'ICONEOF' 2>/dev/null || echo "[WARN] Pillow non installato, icone default"
-from PIL import Image, ImageDraw, ImageFont
-import os
+# ── Copia icone ufficiali dall'icons.zip ──
+echo "[..] Applicazione icone ufficiali..."
+ICON_SRC="public/icons/icon-512.png"
+if [ -f "$ICON_SRC" ]; then
+  python3 << ICONEOF 2>/dev/null || echo "[WARN] Pillow non installato, copio icon-192 direttamente"
+from PIL import Image
+import os, shutil
+src = Image.open('$ICON_SRC').convert('RGBA')
 sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
 for folder, size in sizes.items():
     out = f'android/app/src/main/res/{folder}'
     os.makedirs(out, exist_ok=True)
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    corner = size // 5
-    for y in range(size):
-        r = int(156 + (201 - 156) * y / size)
-        g = int(124 + (123 - 124) * y / size)
-        b = 255
-        for x in range(size):
-            pr = int(r + (255 - r) * x / size * 0.4)
-            pg = int(g + (158 - g) * x / size * 0.4)
-            in_rect = True
-            if x < corner and y < corner: in_rect = ((x-corner)**2+(y-corner)**2) <= corner**2
-            elif x > size-corner and y < corner: in_rect = ((x-(size-corner))**2+(y-corner)**2) <= corner**2
-            elif x < corner and y > size-corner: in_rect = ((x-corner)**2+(y-(size-corner))**2) <= corner**2
-            elif x > size-corner and y > size-corner: in_rect = ((x-(size-corner))**2+(y-(size-corner))**2) <= corner**2
-            if in_rect: img.putpixel((x, y), (pr, pg, int(b + (205 - b) * x / size * 0.4), 255))
-    try: font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", size // 3)
-    except: font = ImageFont.load_default()
-    bbox = draw.textbbox((0, 0), "GC", font=font)
-    tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
-    draw.text(((size-tw)//2, (size-th)//2 - size//20), "GC", fill=(255,255,255,255), font=font)
-    img.save(f'{out}/ic_launcher.png')
-    img.save(f'{out}/ic_launcher_round.png')
-    img.save(f'{out}/ic_launcher_foreground.png')
-print("[OK] Icone generate")
+    resized = src.resize((size, size), Image.LANCZOS)
+    resized.save(f'{out}/ic_launcher.png')
+    resized.save(f'{out}/ic_launcher_round.png')
+    resized.save(f'{out}/ic_launcher_foreground.png')
+print("[OK] Icone ufficiali applicate da icon-512.png")
 ICONEOF
+else
+  echo "[WARN] icon-512.png non trovato in public/icons/ — icone default Android"
+fi
 
 echo "[..] Configurazione build universale..."
 if ! grep -q "GiadaCourses Universal" android/app/build.gradle 2>/dev/null; then

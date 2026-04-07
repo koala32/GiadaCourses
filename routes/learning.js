@@ -259,6 +259,7 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
+      { version: '11.0', date: '2026-04-07', title: 'Restyle & Nuove Feature', changes: ['Restyle completo interfaccia moderna','Password dimenticata con reset via email','Verifica email per nuovi utenti','Notifiche push native per Android APK','Caricamenti media ottimizzati e compressi','Compressione automatica foto prima dell\'upload','Barra di progresso upload visuale','Sicurezza e prestazioni migliorate'] },
       { version: '10.9', date: '2026-04-06', title: 'App Android e Sicurezza', changes: ['App Android nativa APK disponibile','Chiamate e sfide esclusive per app Android','Rilevamento offline automatico','Foto storie ridimensionamento migliorato','Protezione avanzata contro bot'] },
       { version: '10.8', date: '2026-04-06', title: 'Sicurezza e Dirette', changes: ['Protezione avanzata contro bot e scanner','Dirette LIVE migliorate per host e spettatori','Layout corretto su tutte le pagine','Chiamate e sfide in tempo reale potenziate','Storie con foto ridimensionabili'] },
       { version: '10.7', date: '2026-04-01', title: 'Stabilita e Correzioni', changes: ['Dirette LIVE: annullamento corretto','Storie: una sola canzone alla volta','Guida installazione migliorata per iPhone e Android','Navigazione piu fluida e stabile'] },

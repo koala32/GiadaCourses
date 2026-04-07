@@ -1,5 +1,5 @@
 // ============================================================
-//  GiadaCourses v10.0 — Architettura Modulare
+//  GiadaCourses v11.0 — Architettura Modulare
 //  Entry point: collega tutti i moduli
 // ============================================================
 const express = require('express');
@@ -22,6 +22,47 @@ try {
   }
 } catch (e) { console.warn('[ENV] Could not load .env:', e.message); }
 
+// ── Email setup (nodemailer) ──
+let sendMail = null;
+try {
+  const nodemailer = require('nodemailer');
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  if (smtpHost && smtpUser && smtpPass) {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+    sendMail = async (to, subject, html) => {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || '"GiadaCourses" <noreply@giadacourses.app>',
+        to, subject, html
+      });
+    };
+    console.log('[EMAIL] SMTP configured:', smtpHost);
+  } else {
+    console.log('[EMAIL] SMTP not configured — email features disabled. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
+  }
+} catch (e) { console.warn('[EMAIL] nodemailer not available:', e.message); }
+
+// ── Push notifications (web-push) ──
+let webPush = null;
+try {
+  webPush = require('web-push');
+  const vapidPublic = process.env.VAPID_PUBLIC;
+  const vapidPrivate = process.env.VAPID_PRIVATE;
+  if (vapidPublic && vapidPrivate) {
+    webPush.setVapidDetails('https://giadacourses.duckdns.org', vapidPublic, vapidPrivate);
+    console.log('[PUSH] VAPID configured');
+  } else {
+    console.log('[PUSH] VAPID keys not set — push disabled. Run: npm run generate-vapid and add to .env');
+    webPush = null;
+  }
+} catch (e) { console.warn('[PUSH] web-push not available:', e.message); webPush = null; }
+
 // ── Moduli interni ──
 const { db, DB_DIR } = require('./lib/db');
 const { sseClients, ioClients, ssePending, sseEmit, sseBroadcast, setIO } = require('./lib/sse');
@@ -29,6 +70,8 @@ const { UPLOADS_DIR } = require('./lib/upload');
 const { authMiddleware, setupSecurity, logMiddleware, resolveToken } = require('./middleware');
 
 const app = express();
+app.locals.sendMail = sendMail;
+app.locals.webPush = webPush;
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
@@ -162,95 +205,9 @@ io.on('connection', (socket) => {
   ssePending.delete(uid);
   socket.join('user:' + uid);
 
-  // ── Chiamate via Socket.IO ──
-  socket.on('call:invite', async (data) => {
-    try {
-      const { toUserId, offer, videoEnabled } = data;
-      const target = await db.users.findOneAsync({ _id: toUserId });
-      if (!target) return socket.emit('call:error', { error: 'Utente non trovato' });
-      const callId = crypto.randomBytes(8).toString('hex');
-      socialState.activeCalls.set(callId, {
-        callerId: uid, callerName: socket.username, callerAvatar: socket.userAvatar,
-        callerAvatarUrl: socket.userAvatarUrl,
-        calleeId: toUserId, calleeName: target.username,
-        calleeAvatar: target.avatar||'', calleeAvatarUrl: target.avatarUrl||'',
-        startedAt: Date.now(), videoEnabled: !!videoEnabled, monitors: new Set(), answered: false
-      });
-      socket.emit('call:id', { callId });
-      sseEmit(toUserId, 'call_invite', {
-        callId, from: uid, fromName: socket.username,
-        fromAvatar: socket.userAvatar, fromAvatarUrl: socket.userAvatarUrl,
-        videoEnabled: !!videoEnabled, offer
-      });
-      setTimeout(() => {
-        const c = socialState.activeCalls.get(callId);
-        if (c && !c.answered) {
-          sseEmit(c.callerId, 'call_timeout', { callId });
-          sseEmit(c.calleeId, 'call_timeout', { callId });
-          socialState.activeCalls.delete(callId);
-        }
-      }, 60000);
-    } catch(e) { socket.emit('call:error', { error: e.message }); }
-  });
 
-  socket.on('call:answer', (data) => {
-    const call = socialState.activeCalls.get(data.callId);
-    if (!call) return;
-    call.answered = true;
-    sseEmit(call.callerId, 'call_answer', { callId: data.callId, answer: data.answer, from: uid });
-  });
-
-  socket.on('call:ice', (data) => {
-    if (data.targetUserId) sseEmit(data.targetUserId, 'call_ice', { callId: data.callId, candidate: data.candidate, from: uid });
-  });
-
-  socket.on('call:reject', (data) => {
-    const call = socialState.activeCalls.get(data.callId);
-    if (call) { sseEmit(call.callerId, 'call_rejected', { callId: data.callId }); socialState.activeCalls.delete(data.callId); }
-  });
-
-  socket.on('call:end', (data) => {
-    const call = socialState.activeCalls.get(data.callId);
-    if (call) {
-      sseEmit(call.callerId, 'call_ended', { callId: data.callId });
-      sseEmit(call.calleeId, 'call_ended', { callId: data.callId });
-      call.monitors.forEach(mid => sseEmit(mid, 'call_ended', { callId: data.callId }));
-      socialState.activeCalls.delete(data.callId);
-    }
-  });
-
-  // ── Sfide 1v1 via Socket.IO ──
-  socket.on('challenge:invite', async (data) => {
-    try {
-      const target = await db.users.findOneAsync({ _id: data.toUserId });
-      if (!target) return socket.emit('challenge:error', { error: 'Utente non trovato' });
-      const questions = await socialState.generateChallengeQuestions();
-      const cid = crypto.randomBytes(8).toString('hex');
-      const challenge = {
-        id: cid, challengerId: uid, challengerName: socket.username, challengerAvatar: socket.userAvatar,
-        challengeeId: data.toUserId, challengeeName: target.username, challengeeAvatar: target.avatar || '',
-        questions, status: 'pending', scores: { [uid]: [], [data.toUserId]: [] },
-        startedAt: null, createdAt: Date.now(),
-      };
-      socialState.activeChallenges.set(cid, challenge);
-      setTimeout(() => { if (socialState.activeChallenges.get(cid)?.status === 'pending') socialState.activeChallenges.delete(cid); }, 300000);
-      socket.emit('challenge:id', { challengeId: cid });
-      sseEmit(data.toUserId, 'challenge_invite', { challengeId: cid, from: uid, fromName: socket.username, fromAvatar: socket.userAvatar });
-    } catch(e) { socket.emit('challenge:error', { error: e.message }); }
-  });
-
-  socket.on('challenge:accept', (data) => {
-    const ch = socialState.activeChallenges.get(data.challengeId);
-    if (!ch || ch.challengeeId !== uid || ch.status !== 'pending') return;
-    ch.status = 'active'; ch.startedAt = Date.now();
-    sseEmit(ch.challengerId, 'challenge_started', { challengeId: ch.id, questions: socialState.safeQuestions(ch.questions) });
-    socket.emit('challenge:started', { challengeId: ch.id, questions: socialState.safeQuestions(ch.questions) });
-  });
-
-  socket.on('challenge:reject', (data) => {
-    const ch = socialState.activeChallenges.get(data.challengeId);
-    if (ch) { sseEmit(ch.challengerId, 'challenge_rejected', { challengeId: ch.id }); socialState.activeChallenges.delete(ch.id); }
-  });
+  // ── Chiamate e Sfide: gestite via HTTP routes in routes/social.js ──
+  // Socket.IO usato solo per ricezione eventi (non invio)
 
   // ── LIVE via Socket.IO ──
   socket.on('live:ice', (data) => {

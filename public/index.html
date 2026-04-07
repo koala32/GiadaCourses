@@ -222,6 +222,7 @@
       <div class="auth-field"><label>Email</label><input type="email" id="l-email" placeholder="la-tua@email.com" autocomplete="email" oninput="clearAuthErr('login')"></div>
       <div class="auth-field"><label>Password</label><div style="position:relative"><input type="password" id="l-pwd" placeholder="••••••••" autocomplete="current-password" oninput="clearAuthErr('login')" style="padding-right:44px"><button type="button" onclick="togglePwdEye('l-pwd',this)" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px;color:var(--muted)">👁</button></div></div>
       <button class="auth-submit" id="login-submit-btn" onclick="doLogin()">Accedi</button>
+      <div class="forgot-pw" onclick="showForgotPassword()">Password dimenticata?</div>
       <p style="text-align:center;font-size:.8rem;color:var(--muted)">Continua come <strong style="color:var(--coral);cursor:pointer" onclick="closeAuth()">ospite</strong> (senza salvare progressi)</p>
     </div>
     <!-- REGISTER -->

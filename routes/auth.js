@@ -1,10 +1,13 @@
-// routes/auth.js — Autenticazione + Profili utente + Follow + Campanellina
+// routes/auth.js — Auth + Profili + Follow + Password Reset + Push Notifications
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { db } = require('../lib/db');
 const { sseEmit } = require('../lib/sse');
 const { upload } = require('../lib/upload');
 const { requireAuth, requireRole } = require('../middleware');
+
+// Account esenti da verifica email
+const EXEMPT_USERS = ['ilaria', 'giada', 'adri'];
 
 module.exports = function(app) {
 
@@ -25,20 +28,90 @@ module.exports = function(app) {
       const rawIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
       const ip = rawIp.split(',')[0].trim().replace('::ffff:', '').replace('::1', '127.0.0.1');
       const hash = await bcrypt.hash(password, 12);
+      const isExempt = EXEMPT_USERS.includes(cleanUsername.toLowerCase());
       const user = await db.users.insertAsync({
         username: cleanUsername, email: cleanEmail, passwordHash: hash, role: 'user',
         avatar: '', avatarUrl: '', xp: 0, level: level || 'A1', streak: 0, badges: [],
         bio: (bio || '').slice(0, 200), city: (city || '').slice(0, 50),
         nativeLang: nativeLang || '', goal: (goal || '').slice(0, 100),
         following: [], followers: [], progress: {},
-        notifyUsers: [], dmNotifyOff: [], verified: false,
+        notifyUsers: [], dmNotifyOff: [],
+        verified: false, emailVerified: isExempt,
+        pushSubscription: null, pushPrefs: { likes: true, comments: true, follows: true, dms: true, mentions: true },
         theme: 'light', themeColor: '',
         joinDate: Date.now(), lastSeen: Date.now(), banned: false, ip,
       });
       const token = crypto.randomBytes(32).toString('hex');
       await db.sessions.insertAsync({ token, userId: user._id, createdAt: Date.now() });
+      // Send verification email (non-blocking, skip for exempt)
+      if (!isExempt && app.locals.sendMail) {
+        const verifyToken = crypto.randomBytes(32).toString('hex');
+        await db.sessions.insertAsync({ token: verifyToken, userId: user._id, type: 'email-verify', createdAt: Date.now() });
+        const link = `https://giadacourses.duckdns.org/api/auth/verify-email?t=${verifyToken}`;
+        app.locals.sendMail(cleanEmail, 'Verifica il tuo account GiadaCourses', 
+          `<div style="font-family:Inter,sans-serif;max-width:500px;margin:0 auto;padding:30px;background:#F5F3FF;border-radius:18px"><div style="text-align:center;margin-bottom:20px"><div style="display:inline-block;width:60px;height:60px;border-radius:14px;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;font-size:1.5rem;font-weight:800;line-height:60px">GC</div></div><h2 style="text-align:center;color:#1E1B4B;font-size:1.3rem">Benvenuto su GiadaCourses!</h2><p style="color:#6B7280;text-align:center;line-height:1.6">Ciao <strong>${cleanUsername}</strong>, clicca il bottone qui sotto per verificare il tuo account.</p><div style="text-align:center;margin:24px 0"><a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:.95rem">Verifica Email</a></div><p style="color:#9CA3AF;font-size:.75rem;text-align:center">Se non hai creato tu questo account, ignora questa email.</p></div>`
+        ).catch(() => {});
+      }
       const { passwordHash, ...safe } = user;
       res.json({ user: safe, token });
+    } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
+  });
+
+  // ── VERIFICA EMAIL ──
+  app.get('/api/auth/verify-email', async (req, res) => {
+    try {
+      const { t } = req.query;
+      if (!t) return res.status(400).send('Token mancante');
+      const session = await db.sessions.findOneAsync({ token: t, type: 'email-verify' });
+      if (!session) return res.send('<html><body style="font-family:sans-serif;text-align:center;padding:60px;background:#F5F3FF"><h2 style="color:#EF4444">Link non valido o scaduto</h2><p><a href="https://giadacourses.duckdns.org" style="color:#8B5CF6">Torna a GiadaCourses</a></p></body></html>');
+      await db.users.updateAsync({ _id: session.userId }, { $set: { emailVerified: true } });
+      await db.sessions.removeAsync({ token: t }, {});
+      res.send('<html><body style="font-family:sans-serif;text-align:center;padding:60px;background:#F5F3FF"><h2 style="color:#22C55E">Email verificata!</h2><p>Il tuo account e ora verificato.</p><p><a href="https://giadacourses.duckdns.org" style="color:#8B5CF6;font-weight:700;font-size:1.1rem">Apri GiadaCourses</a></p></body></html>');
+    } catch (e) { res.status(500).send('Errore del server'); }
+  });
+
+  // ── PASSWORD DIMENTICATA ──
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ error: 'Email richiesta' });
+      const user = await db.users.findOneAsync({ email: email.toLowerCase().trim() });
+      // Always return success to prevent email enumeration
+      if (!user) return res.json({ ok: true, message: 'Se l\'email esiste, riceverai un link per reimpostare la password.' });
+      // Generate reset token (valid 1 hour)
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      await db.sessions.insertAsync({ token: resetToken, userId: user._id, type: 'password-reset', createdAt: Date.now(), expiresAt: Date.now() + 3600000 });
+      if (app.locals.sendMail) {
+        const link = `https://giadacourses.duckdns.org/api/auth/reset-password-page?t=${resetToken}`;
+        await app.locals.sendMail(user.email, 'Reimposta la tua password — GiadaCourses',
+          `<div style="font-family:Inter,sans-serif;max-width:500px;margin:0 auto;padding:30px;background:#F5F3FF;border-radius:18px"><div style="text-align:center;margin-bottom:20px"><div style="display:inline-block;width:60px;height:60px;border-radius:14px;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;font-size:1.5rem;font-weight:800;line-height:60px">GC</div></div><h2 style="text-align:center;color:#1E1B4B;font-size:1.3rem">Reimposta la tua password</h2><p style="color:#6B7280;text-align:center;line-height:1.6">Hai richiesto di reimpostare la password per <strong>${user.username}</strong>.</p><div style="text-align:center;margin:24px 0"><a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700">Reimposta Password</a></div><p style="color:#9CA3AF;font-size:.75rem;text-align:center">Il link scade tra 1 ora. Se non hai richiesto tu il reset, ignora questa email.</p></div>`
+        ).catch(() => {});
+      }
+      res.json({ ok: true, message: 'Se l\'email esiste, riceverai un link per reimpostare la password.' });
+    } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
+  });
+
+  // ── PAGINA RESET PASSWORD ──
+  app.get('/api/auth/reset-password-page', async (req, res) => {
+    const { t } = req.query;
+    if (!t) return res.status(400).send('Token mancante');
+    const session = await db.sessions.findOneAsync({ token: t, type: 'password-reset' });
+    if (!session || session.expiresAt < Date.now()) return res.send('<html><body style="font-family:sans-serif;text-align:center;padding:60px;background:#F5F3FF"><h2 style="color:#EF4444">Link scaduto o non valido</h2><p><a href="https://giadacourses.duckdns.org" style="color:#8B5CF6">Torna a GiadaCourses</a></p></body></html>');
+    res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset Password</title></head><body style="font-family:Inter,sans-serif;background:#F5F3FF;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;margin:0"><div style="max-width:400px;width:100%;background:#fff;border-radius:18px;padding:30px;box-shadow:0 4px 24px rgba(79,70,229,.08)"><div style="text-align:center;margin-bottom:20px"><div style="display:inline-block;width:60px;height:60px;border-radius:14px;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;font-size:1.5rem;font-weight:800;line-height:60px">GC</div></div><h2 style="text-align:center;color:#1E1B4B;margin-bottom:20px">Nuova Password</h2><div id="msg" style="display:none;padding:10px;border-radius:10px;margin-bottom:14px;font-size:.85rem;font-weight:600"></div><input id="pw1" type="password" placeholder="Nuova password (min 6 caratteri)" style="width:100%;padding:12px;border:1.5px solid rgba(139,92,246,.15);border-radius:12px;margin-bottom:12px;font-size:.9rem;outline:none;box-sizing:border-box"><input id="pw2" type="password" placeholder="Conferma password" style="width:100%;padding:12px;border:1.5px solid rgba(139,92,246,.15);border-radius:12px;margin-bottom:16px;font-size:.9rem;outline:none;box-sizing:border-box"><button onclick="doReset()" style="width:100%;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;border:none;border-radius:12px;padding:14px;font-weight:700;font-size:1rem;cursor:pointer">Reimposta Password</button></div><script>async function doReset(){var p1=document.getElementById('pw1').value,p2=document.getElementById('pw2').value,msg=document.getElementById('msg');if(!p1||p1.length<6){msg.style.display='block';msg.style.background='rgba(239,68,68,.1)';msg.style.color='#EF4444';msg.textContent='Password troppo corta (minimo 6 caratteri)';return}if(p1!==p2){msg.style.display='block';msg.style.background='rgba(239,68,68,.1)';msg.style.color='#EF4444';msg.textContent='Le password non coincidono';return}try{var r=await fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:'${t}',password:p1})});var d=await r.json();if(d.ok){msg.style.display='block';msg.style.background='rgba(34,197,94,.1)';msg.style.color='#22C55E';msg.textContent='Password reimpostata! Puoi accedere ora.';setTimeout(function(){location.href='https://giadacourses.duckdns.org'},2000)}else{msg.style.display='block';msg.style.background='rgba(239,68,68,.1)';msg.style.color='#EF4444';msg.textContent=d.error||'Errore'}}catch(e){msg.style.display='block';msg.style.background='rgba(239,68,68,.1)';msg.style.color='#EF4444';msg.textContent='Errore di connessione'}}</script></body></html>`);
+  });
+
+  // ── RESET PASSWORD (API) ──
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) return res.status(400).json({ error: 'Dati mancanti' });
+      if (password.length < 6) return res.status(400).json({ error: 'Password troppo corta' });
+      const session = await db.sessions.findOneAsync({ token, type: 'password-reset' });
+      if (!session || session.expiresAt < Date.now()) return res.status(400).json({ error: 'Link scaduto. Richiedi un nuovo reset.' });
+      const hash = await bcrypt.hash(password, 12);
+      await db.users.updateAsync({ _id: session.userId }, { $set: { passwordHash: hash, mustChangePassword: false } });
+      await db.sessions.removeAsync({ token }, {});
+      res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
   });
 
@@ -57,6 +130,64 @@ module.exports = function(app) {
       await db.sessions.insertAsync({ token, userId: user._id, createdAt: Date.now() });
       const { passwordHash, ...safe } = user;
       res.json({ user: safe, token, mustChangePassword: !!user.mustChangePassword });
+    } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
+  });
+
+  // ── PUSH NOTIFICATION SUBSCRIPTION ──
+  app.post('/api/push/subscribe', requireAuth, async (req, res) => {
+    try {
+      const { subscription } = req.body;
+      if (!subscription) return res.status(400).json({ error: 'Subscription mancante' });
+      await db.users.updateAsync({ _id: req.user._id }, { $set: { pushSubscription: subscription } });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/push/unsubscribe', requireAuth, async (req, res) => {
+    try {
+      await db.users.updateAsync({ _id: req.user._id }, { $set: { pushSubscription: null } });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/push/preferences', requireAuth, async (req, res) => {
+    try {
+      const { prefs } = req.body;
+      if (!prefs) return res.status(400).json({ error: 'Preferenze mancanti' });
+      const allowed = ['likes', 'comments', 'follows', 'dms', 'mentions'];
+      const clean = {};
+      allowed.forEach(k => { clean[k] = !!prefs[k]; });
+      await db.users.updateAsync({ _id: req.user._id }, { $set: { pushPrefs: clean } });
+      res.json({ ok: true, prefs: clean });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/push/vapid-key', (req, res) => {
+    const key = process.env.VAPID_PUBLIC || '';
+    res.json({ publicKey: key });
+  });
+
+  // ── RESEND VERIFICATION EMAIL ──
+  app.post('/api/auth/resend-verification', requireAuth, async (req, res) => {
+    try {
+      const user = await db.users.findOneAsync({ _id: req.user._id });
+      if (!user) return res.status(404).json({ error: 'Utente non trovato' });
+      if (user.emailVerified) return res.json({ ok: true, message: 'Email gia verificata' });
+      if (EXEMPT_USERS.includes(user.username.toLowerCase())) {
+        await db.users.updateAsync({ _id: user._id }, { $set: { emailVerified: true } });
+        return res.json({ ok: true });
+      }
+      // Remove old verify tokens
+      await db.sessions.removeAsync({ userId: user._id, type: 'email-verify' }, { multi: true });
+      const verifyToken = crypto.randomBytes(32).toString('hex');
+      await db.sessions.insertAsync({ token: verifyToken, userId: user._id, type: 'email-verify', createdAt: Date.now() });
+      if (app.locals.sendMail) {
+        const link = `https://giadacourses.duckdns.org/api/auth/verify-email?t=${verifyToken}`;
+        await app.locals.sendMail(user.email, 'Verifica il tuo account GiadaCourses',
+          `<div style="font-family:Inter,sans-serif;max-width:500px;margin:0 auto;padding:30px;background:#F5F3FF;border-radius:18px"><div style="text-align:center;margin-bottom:20px"><div style="display:inline-block;width:60px;height:60px;border-radius:14px;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;font-size:1.5rem;font-weight:800;line-height:60px">GC</div></div><h2 style="text-align:center;color:#1E1B4B">Verifica il tuo account</h2><p style="color:#6B7280;text-align:center;line-height:1.6">Ciao <strong>${user.username}</strong>, clicca qui sotto per verificare.</p><div style="text-align:center;margin:24px 0"><a href="${link}" style="display:inline-block;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;padding:14px 32px;border-radius:12px;text-decoration:none;font-weight:700">Verifica Email</a></div></div>`
+        );
+      }
+      res.json({ ok: true, message: 'Email di verifica inviata' });
     } catch (e) { res.status(500).json({ error: 'Errore del server' }); }
   });
 

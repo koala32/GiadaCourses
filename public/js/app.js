@@ -181,6 +181,11 @@ async function doLogin(){
     localStorage.setItem('gc_token',r.token);
     ME=r.user;
     closeAuth();
+    // Se email non verificata, mostra schermata verifica
+    if(ME.emailVerified === false){
+      showEmailVerificationScreen(ME.email || email);
+      return;
+    }
     // Se deve cambiare password, mostra il modal
     if(r.mustChangePassword){
       showForcePasswordChange();
@@ -190,6 +195,7 @@ async function doLogin(){
     renderNavUser();
     startSSE();
     renderHome();
+    if(IS_NATIVE_APK) setTimeout(initPushNotifications, 2000);
   }catch(e){
     const msg=e.message||'Errore di connessione';
     if(msg.toLowerCase().includes('password')||msg.toLowerCase().includes('email')){
@@ -240,6 +246,130 @@ async function submitForcePassword(){
   }
 }
 
+// ── PASSWORD DIMENTICATA ──
+function showForgotPassword(){
+  const loginForm = document.getElementById('login-form');
+  const regForm = document.getElementById('register-form');
+  if(loginForm) loginForm.classList.add('hidden');
+  if(regForm) regForm.classList.add('hidden');
+  let fpForm = document.getElementById('forgot-form');
+  if(!fpForm){
+    fpForm = document.createElement('div');
+    fpForm.id = 'forgot-form';
+    fpForm.className = 'auth-form pw-reset-wrap';
+    fpForm.innerHTML = `
+      <h3>Password dimenticata?</h3>
+      <p>Inserisci l'email del tuo account e ti invieremo un link per reimpostare la password.</p>
+      <div class="auth-error-box" id="forgot-err"></div>
+      <div class="field"><label>Email</label><input type="email" id="fp-email" placeholder="la-tua@email.com"></div>
+      <button class="btn-primary" id="fp-submit-btn" onclick="doForgotPassword()" style="margin-top:8px">Invia link di reset</button>
+      <div id="fp-success" style="display:none;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:14px;margin-top:14px;font-size:.85rem;color:#22C55E;font-weight:600;line-height:1.5"></div>
+      <div class="forgot-pw" onclick="backToLogin()" style="margin-top:16px">← Torna al login</div>
+    `;
+    loginForm.parentElement.appendChild(fpForm);
+  } else {
+    fpForm.classList.remove('hidden');
+  }
+}
+function backToLogin(){
+  const fpForm = document.getElementById('forgot-form');
+  if(fpForm) fpForm.classList.add('hidden');
+  document.getElementById('login-form').classList.remove('hidden');
+  document.getElementById('tab-login-btn')?.classList.add('active');
+  document.getElementById('tab-reg-btn')?.classList.remove('active');
+}
+async function doForgotPassword(){
+  const email = document.getElementById('fp-email')?.value?.trim();
+  const errBox = document.getElementById('forgot-err');
+  const successBox = document.getElementById('fp-success');
+  const btn = document.getElementById('fp-submit-btn');
+  if(errBox){errBox.textContent='';errBox.classList.remove('visible');}
+  if(successBox) successBox.style.display='none';
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    if(errBox){errBox.textContent='Inserisci un\'email valida';errBox.classList.add('visible');}
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='Invio in corso...';}
+  try{
+    const r = await POST('/api/auth/forgot-password',{email});
+    if(successBox){
+      successBox.style.display='block';
+      successBox.textContent='Se l\'email e associata a un account, riceverai un link per reimpostare la password. Controlla anche la cartella spam.';
+    }
+  }catch(e){
+    if(errBox){errBox.textContent=e.message||'Errore di connessione';errBox.classList.add('visible');}
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Invia link di reset';}
+  }
+}
+
+
+// ── EMAIL VERIFICATION SCREEN ──
+function showEmailVerificationScreen(email){
+  var overlay = document.createElement('div');
+  overlay.id = 'email-verify-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#0F0D2E 0%,#1E1B4B 40%,#312E81 100%);display:flex;align-items:center;justify-content:center;padding:20px;color:#fff;text-align:center';
+  overlay.innerHTML = '<div style="max-width:400px;width:100%">'
+    + '<div style="width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg,#8B5CF6,#EC4899);margin:0 auto 24px;display:flex;align-items:center;justify-content:center;font-size:2.5rem">\u2709\uFE0F</div>'
+    + '<h2 style="font-family:Poppins,sans-serif;font-size:1.5rem;margin-bottom:10px">Controlla la tua email!</h2>'
+    + '<p style="opacity:.75;line-height:1.6;margin-bottom:24px;font-size:.9rem">Abbiamo inviato un link di verifica a:<br><strong style="color:#A78BFA">'+escHTML(email)+'</strong></p>'
+    + '<div style="background:rgba(255,255,255,.06);border-radius:14px;padding:16px;text-align:left;margin-bottom:20px">'
+    + '<div style="font-weight:700;font-size:.85rem;margin-bottom:10px">Come fare:</div>'
+    + '<div style="font-size:.82rem;opacity:.8;line-height:1.6">1. Apri la tua email<br>2. Cerca il messaggio da <strong>GiadaCourses</strong><br>3. Clicca il bottone <strong>Verifica Email</strong><br>4. Torna qui e premi il bottone sotto</div>'
+    + '</div>'
+    + '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);border-radius:12px;padding:12px;margin-bottom:20px;font-size:.8rem;color:#FBBF24">Controlla anche la cartella <strong>Spam</strong> o <strong>Promozioni</strong></div>'
+    + '<button onclick="checkEmailVerified()" style="width:100%;background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;border:none;border-radius:14px;padding:14px;font-weight:700;font-size:1rem;cursor:pointer;margin-bottom:10px">Ho verificato, entra!</button>'
+    + '<button onclick="resendVerificationEmail()" id="resend-verify-btn" style="width:100%;background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px;font-weight:600;font-size:.85rem;cursor:pointer">Reinvia email di verifica</button>'
+    + '</div>';
+  document.body.appendChild(overlay);
+}
+async function checkEmailVerified(){
+  try{
+    const me = await GET('/api/auth/me');
+    if(me && me.emailVerified){
+      ME = me;
+      document.getElementById('email-verify-overlay')?.remove();
+      toast('Email verificata! Benvenuto '+ME.username+'!');
+      renderNavUser(); startSSE(); renderHome();
+    } else { toast('Email non ancora verificata. Controlla la tua casella!','error'); }
+  }catch(e){ toast('Errore di connessione','error'); }
+}
+async function resendVerificationEmail(){
+  const btn = document.getElementById('resend-verify-btn');
+  if(btn){btn.disabled=true;btn.textContent='Invio in corso...';}
+  try{ await POST('/api/auth/resend-verification'); toast('Email di verifica reinviata!'); }
+  catch(e){ toast(e.message||'Errore','error'); }
+  finally{ if(btn){btn.disabled=false;btn.textContent='Reinvia email di verifica';} }
+}
+
+// ── PUSH NOTIFICATIONS ──
+async function initPushNotifications(){
+  if(!IS_NATIVE_APK) return; // Solo APK Android
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if(existing) return; // Already subscribed
+    // Get VAPID key from server
+    const keyRes = await GET('/api/push/vapid-key');
+    if(!keyRes?.publicKey) return;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(keyRes.publicKey)
+    });
+    await POST('/api/push/subscribe', { subscription: sub.toJSON() });
+    console.log('[PUSH] Subscribed successfully');
+  }catch(e){ console.warn('[PUSH] Failed:', e.message); }
+}
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/\-/g,'+').replace(/_/g,'/');
+  const raw=window.atob(base64);
+  const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;++i) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+
 async function doRegister(){
   const usernameEl=document.getElementById('r-username');
   const emailEl=document.getElementById('r-email');
@@ -268,11 +398,18 @@ async function doRegister(){
     });
     localStorage.setItem('gc_token',r.token);
     ME=r.user;
-    closeAuth();
-    toast(`Benvenuto ${ME.username}! 🎉 Account creato!`);
-    renderNavUser();
-    startSSE();
-    renderHome();
+    // Se l'email è già verificata (account esenti), entra subito
+    if(ME.emailVerified){
+      closeAuth();
+      toast(`Benvenuto ${ME.username}! 🎉 Account creato!`);
+      renderNavUser();
+      startSSE();
+      renderHome();
+    } else {
+      // Mostra schermata "verifica email"
+      closeAuth();
+      showEmailVerificationScreen(email);
+    }
   }catch(e){
     const msg=e.message||'Errore';
     if(msg.toLowerCase().includes('email')){
@@ -536,12 +673,11 @@ async function createReelPost(){
     var tok = localStorage.getItem('gc_token');
     for(var i=0; i<pendingReelMedia.length; i++){
       var m = pendingReelMedia[i];
+      var prepared = await prepareMediaForUpload(m.file, 1600, 0.85);
       var fd = new FormData();
-      fd.append('file', m.file);
+      fd.append('file', prepared.file, prepared.name);
       toast('Caricamento '+(i+1)+'/'+pendingReelMedia.length+'...','info',3000);
-      var r = await fetch('/api/media/upload',{method:'POST',headers:{'Authorization':'Bearer '+tok},body:fd});
-      var d = await r.json();
-      if(!r.ok) throw new Error(d.error||'Upload fallito');
+      var d = await uploadWithProgress('/api/media/upload', fd, {'Authorization':'Bearer '+tok});
       uploadedMedia.push({url: d.url, type: d.type || m.type});
     }
     var caption = document.getElementById('new-reel-caption')?.value?.trim()||'';
@@ -969,16 +1105,11 @@ async function createPost(){
       if(pendingPostMedia.blob){
         fd.append('file', pendingPostMedia.blob, pendingPostMedia.type==='image'?'photo.jpg':'media.bin');
       } else {
-        fd.append('file', pendingPostMedia.file);
+        // Compress image before upload
+        const prepared = await prepareMediaForUpload(pendingPostMedia.file, 1200, 0.82);
+        fd.append('file', prepared.file, prepared.name);
       }
-      toast('Caricamento media...','info',5000);
-      const r=await fetch('/api/media/upload',{
-        method:'POST',
-        headers:{'Authorization':'Bearer '+tok},
-        body:fd
-      });
-      const d=await r.json();
-      if(!r.ok) throw new Error(d.error||'Upload fallito ('+r.status+')');
+      const d = await uploadWithProgress('/api/media/upload', fd, {'Authorization':'Bearer '+tok});
       mediaUrl=d.url; mediaType=d.type;
     }
     await POST('/api/posts',{text:text||'',visibility:'public',mediaUrl,mediaType});
@@ -3180,9 +3311,7 @@ async function publishStory(){
     fd.append('musicTitle',storySelectedMusicTitle||'');
     if(storyTextLayers.length) fd.append('textOverlays',JSON.stringify(storyTextLayers));
     const tok=localStorage.getItem('gc_token');
-    const r=await fetch('/api/stories',{method:'POST',headers:{'Authorization':'Bearer '+tok},body:fd});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Errore');
+    const d = await uploadWithProgress('/api/stories', fd, {'Authorization':'Bearer '+tok});
     window._storyBgTemplate=null;
     closeStoryCreator();
     toast('Storia pubblicata! ✨');
@@ -3433,12 +3562,16 @@ async function deleteStory(id){
 /* ============================================================
    UTILITÀ MEDIA
 ============================================================ */
+// ── MEDIA OPTIMIZATION ENGINE v11 ──
+const _uploadQueue = [];
+let _uploadActive = 0;
+const MAX_CONCURRENT_UPLOADS = 2;
+
 function compressImage(file, maxSize, quality){
-  // Valida tipo file prima di procedere
   const validTypes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp','image/heic','image/heif'];
   const validExts = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
   if (!validTypes.includes(file.type) && !validExts.test(file.name)) {
-    return Promise.resolve(file); // Pass-through per tipi sconosciuti
+    return Promise.resolve(file);
   }
   return new Promise(resolve=>{
     const img=new Image();
@@ -3459,7 +3592,7 @@ function compressImage(file, maxSize, quality){
         cleanup();
         canvas.toBlob(blob=>{
           if(blob&&blob.size>0) resolve(blob);
-          else resolve(file); // fallback: usa file originale
+          else resolve(file);
         },'image/jpeg',quality);
       }catch(e){cleanup();resolve(file);}
     };
@@ -3469,6 +3602,101 @@ function compressImage(file, maxSize, quality){
       img.src=objUrl;
     }catch(e){resolve(file);}
   });
+}
+
+// Compress media before upload (photos compressed, videos size-checked)
+async function prepareMediaForUpload(file, maxImgSize, imgQuality){
+  maxImgSize = maxImgSize || 1200;
+  imgQuality = imgQuality || 0.82;
+  if(file.type.startsWith('image/')){
+    const compressed = await compressImage(file, maxImgSize, imgQuality);
+    return { file: compressed, name: 'photo.jpg', type: 'image' };
+  }
+  if(file.type.startsWith('video/')){
+    // Check video size — warn if >50MB
+    if(file.size > 50*1024*1024){
+      toast('Video grande ('+Math.round(file.size/1024/1024)+'MB) — caricamento potrebbe richiedere tempo','info',5000);
+    }
+    return { file, name: file.name, type: 'video' };
+  }
+  if(file.type.startsWith('audio/')){
+    return { file, name: file.name, type: 'audio' };
+  }
+  return { file, name: file.name, type: 'file' };
+}
+
+// Upload with progress bar
+function uploadWithProgress(url, formData, headers){
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    Object.keys(headers||{}).forEach(k => xhr.setRequestHeader(k, headers[k]));
+    // Show progress bar
+    showUploadProgress(0);
+    xhr.upload.onprogress = (e) => {
+      if(e.lengthComputable){
+        const pct = Math.round((e.loaded / e.total) * 100);
+        showUploadProgress(pct);
+      }
+    };
+    xhr.onload = () => {
+      hideUploadProgress();
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if(xhr.status >= 200 && xhr.status < 300) resolve(data);
+        else reject(new Error(data.error || 'Upload fallito ('+xhr.status+')'));
+      } catch(e) { reject(new Error('Risposta non valida dal server')); }
+    };
+    xhr.onerror = () => { hideUploadProgress(); reject(new Error('Errore di rete durante l\'upload')); };
+    xhr.ontimeout = () => { hideUploadProgress(); reject(new Error('Upload timeout — riprova con un file piu piccolo')); };
+    xhr.timeout = 300000; // 5 min timeout
+    xhr.send(formData);
+  });
+}
+
+// Global upload progress bar
+function showUploadProgress(pct){
+  let bar = document.getElementById('gc-upload-progress');
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'gc-upload-progress';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;height:3px;background:rgba(139,92,246,.15);pointer-events:none;transition:opacity .3s';
+    bar.innerHTML = '<div id="gc-upload-bar" style="height:100%;background:linear-gradient(90deg,#8B5CF6,#EC4899);border-radius:0 2px 2px 0;transition:width .2s ease;width:0%"></div>';
+    document.body.appendChild(bar);
+  }
+  bar.style.opacity = '1';
+  const inner = document.getElementById('gc-upload-bar');
+  if(inner) inner.style.width = pct + '%';
+}
+function hideUploadProgress(){
+  const bar = document.getElementById('gc-upload-progress');
+  if(bar){
+    const inner = document.getElementById('gc-upload-bar');
+    if(inner) inner.style.width = '100%';
+    setTimeout(()=>{ bar.style.opacity = '0'; setTimeout(()=>{ if(inner) inner.style.width = '0%'; }, 300); }, 500);
+  }
+}
+
+// Queued upload — prevents simultaneous overload
+function queueUpload(uploadFn){
+  return new Promise((resolve, reject) => {
+    _uploadQueue.push({ fn: uploadFn, resolve, reject });
+    processUploadQueue();
+  });
+}
+async function processUploadQueue(){
+  if(_uploadActive >= MAX_CONCURRENT_UPLOADS || !_uploadQueue.length) return;
+  _uploadActive++;
+  const { fn, resolve, reject } = _uploadQueue.shift();
+  try {
+    const result = await fn();
+    resolve(result);
+  } catch(e) {
+    reject(e);
+  } finally {
+    _uploadActive--;
+    if(_uploadQueue.length) processUploadQueue();
+  }
 }
 
 function openLightbox(src, type='image'){
@@ -3728,15 +3956,11 @@ async function sendDMMedia(input){
   const file=input.files[0];
   if(!file||!dmCurrentUser)return;
   try{
-    const isImg=file.type.startsWith('image/');
-    let uploadFile=file;
-    if(isImg) uploadFile=await compressImage(file,1200,0.8);
+    const prepared = await prepareMediaForUpload(file, 1200, 0.8);
     const fd=new FormData();
-    fd.append('file',uploadFile,isImg?'photo.jpg':file.name);
+    fd.append('file', prepared.file, prepared.name);
     const tok=localStorage.getItem('gc_token');
-    const r=await fetch('/api/messages/'+dmCurrentUser._id,{method:'POST',headers:{'Authorization':'Bearer '+tok},body:fd});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Upload fallito');
+    const d = await uploadWithProgress('/api/messages/'+dmCurrentUser._id, fd, {'Authorization':'Bearer '+tok});
     appendDMMessage({fromId:ME._id,text:'',mediaUrl:d.mediaUrl,mediaType:d.mediaType,timestamp:Date.now()});
   }catch(e){toast(e.message,'error');}
   input.value='';

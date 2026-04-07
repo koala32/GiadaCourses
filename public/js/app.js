@@ -181,11 +181,6 @@ async function doLogin(){
     localStorage.setItem('gc_token',r.token);
     ME=r.user;
     closeAuth();
-    // Se email non verificata, mostra schermata verifica
-    if(ME.emailVerified === false){
-      showEmailVerificationScreen(ME.email || email);
-      return;
-    }
     // Se deve cambiare password, mostra il modal
     if(r.mustChangePassword){
       showForcePasswordChange();
@@ -195,6 +190,10 @@ async function doLogin(){
     renderNavUser();
     startSSE();
     renderHome();
+    // Reminder gentile verifica email (non bloccante)
+    if(ME.emailVerified === false && !localStorage.getItem('gc_email_reminded_'+ME._id)){
+      setTimeout(()=>{ toast('Verifica la tua email dal profilo per poter reimpostare la password in futuro','info',6000); localStorage.setItem('gc_email_reminded_'+ME._id,'1'); },3000);
+    }
     if(IS_NATIVE_APK) setTimeout(initPushNotifications, 2000);
   }catch(e){
     const msg=e.message||'Errore di connessione';
@@ -398,17 +397,14 @@ async function doRegister(){
     });
     localStorage.setItem('gc_token',r.token);
     ME=r.user;
-    // Se l'email è già verificata (account esenti), entra subito
-    if(ME.emailVerified){
-      closeAuth();
-      toast(`Benvenuto ${ME.username}! 🎉 Account creato!`);
-      renderNavUser();
-      startSSE();
-      renderHome();
-    } else {
-      // Mostra schermata "verifica email"
-      closeAuth();
-      showEmailVerificationScreen(email);
+    closeAuth();
+    toast(`Benvenuto ${ME.username}! 🎉 Account creato!`);
+    renderNavUser();
+    startSSE();
+    renderHome();
+    // Reminder gentile per verifica email (non bloccante)
+    if(!ME.emailVerified){
+      setTimeout(()=>{ toast('Puoi verificare la tua email dal profilo per reimpostare la password in futuro','info',6000); },4000);
     }
   }catch(e){
     const msg=e.message||'Errore';
@@ -673,13 +669,21 @@ async function createReelPost(){
     var tok = localStorage.getItem('gc_token');
     for(var i=0; i<pendingReelMedia.length; i++){
       var m = pendingReelMedia[i];
-      var prepared = await prepareMediaForUpload(m.file, 1600, 0.85);
-      var fd = new FormData();
-      fd.append('file', prepared.file, prepared.name);
-      toast('Caricamento '+(i+1)+'/'+pendingReelMedia.length+'...','info',3000);
-      var d = await uploadWithProgress('/api/media/upload', fd, {'Authorization':'Bearer '+tok});
-      uploadedMedia.push({url: d.url, type: d.type || m.type});
+      try{
+        var prepared = await prepareMediaForUpload(m.file, 1600, 0.85);
+        var fd = new FormData();
+        fd.append('file', prepared.file, prepared.name);
+        toast('Caricamento '+(i+1)+'/'+pendingReelMedia.length+'...','info',4000);
+        var d = await uploadWithProgress('/api/media/upload', fd, {'Authorization':'Bearer '+tok});
+        if(d && d.url) uploadedMedia.push({url: d.url, type: d.type || m.type});
+        else throw new Error('Risposta upload incompleta');
+      }catch(fileErr){
+        console.error('[REEL] Upload file '+(i+1)+' failed:', fileErr);
+        toast('Errore caricamento file '+(i+1)+': '+fileErr.message,'error',4000);
+        // Continue with other files if this one failed
+      }
     }
+    if(!uploadedMedia.length){throw new Error('Nessun file caricato. Riprova.');}
     var caption = document.getElementById('new-reel-caption')?.value?.trim()||'';
     if(uploadedMedia.length === 1){
       await POST('/api/posts',{text:caption, mediaUrl:uploadedMedia[0].url, mediaType:uploadedMedia[0].type, postType:'reel'});
@@ -1383,6 +1387,11 @@ async function renderProfile(){
       <button class="btn-primary btn-sm" onclick="saveProfile()" style="width:auto;padding:11px 24px">💾 Salva</button>
     </div>
     <div class="settings-card">
+      <h3>📧 Verifica Email</h3>
+      ${ME.emailVerified ? '<div class="email-badge verified" style="margin-bottom:8px">✓ Email verificata</div><p style="font-size:.82rem;color:var(--muted)">La tua email e verificata. Puoi usarla per reimpostare la password.</p>'
+        : '<div class="email-badge unverified" style="margin-bottom:8px">✗ Email non verificata</div><p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">Verifica la tua email per poter reimpostare la password in futuro o contatta Adri.</p><button class="btn-primary btn-sm" onclick="sendVerifyEmail()" id="verify-email-btn" style="width:auto;padding:11px 24px">📧 Invia email di verifica</button>'}
+    </div>
+    <div class="settings-card">
       <h3>🔒 Cambia Password</h3>
       <div class="field"><label>Password attuale</label><input type="password" id="s-oldpwd" placeholder="••••••••"></div>
       <div class="field"><label>Nuova password</label><input type="password" id="s-newpwd" placeholder="Min. 6 caratteri"></div>
@@ -1479,6 +1488,16 @@ async function saveProfile(){
     renderNavUser();
     renderProfile();
   }catch(e){toast(e.message,'error');}
+}
+
+async function sendVerifyEmail(){
+  const btn=document.getElementById('verify-email-btn');
+  if(btn){btn.disabled=true;btn.textContent='Invio in corso...';}
+  try{
+    await POST('/api/auth/resend-verification');
+    toast('Email di verifica inviata! Controlla la tua casella (anche spam)','success',5000);
+  }catch(e){toast(e.message||'Errore invio email','error');}
+  finally{if(btn){btn.disabled=false;btn.textContent='📧 Invia email di verifica';}}
 }
 
 async function changePwd(){
@@ -3626,32 +3645,60 @@ async function prepareMediaForUpload(file, maxImgSize, imgQuality){
 }
 
 // Upload with progress bar
-function uploadWithProgress(url, formData, headers){
+function uploadWithProgress(url, formData, headers, _retryCount){
+  _retryCount = _retryCount || 0;
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    let settled = false;
+    const settle = (fn, val) => { if(!settled){ settled=true; hideUploadProgress(); fn(val); } };
     xhr.open('POST', url);
     Object.keys(headers||{}).forEach(k => xhr.setRequestHeader(k, headers[k]));
-    // Show progress bar
     showUploadProgress(0);
     xhr.upload.onprogress = (e) => {
-      if(e.lengthComputable){
-        const pct = Math.round((e.loaded / e.total) * 100);
-        showUploadProgress(pct);
-      }
+      if(e.lengthComputable) showUploadProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
-      hideUploadProgress();
       try {
         const data = JSON.parse(xhr.responseText);
-        if(xhr.status >= 200 && xhr.status < 300) resolve(data);
-        else reject(new Error(data.error || 'Upload fallito ('+xhr.status+')'));
-      } catch(e) { reject(new Error('Risposta non valida dal server')); }
+        if(xhr.status >= 200 && xhr.status < 300) settle(resolve, data);
+        else settle(reject, new Error(data.error || 'Upload fallito ('+xhr.status+')'));
+      } catch(e) {
+        // Response not JSON — try fallback with fetch
+        if(_retryCount < 1){
+          console.warn('[UPLOAD] XHR response parse failed, retrying with fetch...');
+          hideUploadProgress();
+          uploadWithFetch(url, formData, headers).then(resolve).catch(reject);
+        } else { settle(reject, new Error('Errore server durante upload')); }
+      }
     };
-    xhr.onerror = () => { hideUploadProgress(); reject(new Error('Errore di rete durante l\'upload')); };
-    xhr.ontimeout = () => { hideUploadProgress(); reject(new Error('Upload timeout — riprova con un file piu piccolo')); };
-    xhr.timeout = 300000; // 5 min timeout
+    xhr.onerror = () => {
+      if(_retryCount < 2){
+        console.warn('[UPLOAD] XHR error, retry '+ (_retryCount+1));
+        hideUploadProgress();
+        setTimeout(()=>{ uploadWithProgress(url, formData, headers, _retryCount+1).then(resolve).catch(reject); }, 1000);
+      } else { settle(reject, new Error('Errore di rete — controlla la connessione')); }
+    };
+    xhr.onabort = () => { settle(reject, new Error('Upload annullato')); };
+    xhr.ontimeout = () => {
+      if(_retryCount < 1){
+        console.warn('[UPLOAD] XHR timeout, retrying...');
+        hideUploadProgress();
+        setTimeout(()=>{ uploadWithProgress(url, formData, headers, _retryCount+1).then(resolve).catch(reject); }, 1000);
+      } else { settle(reject, new Error('Upload timeout — file troppo grande')); }
+    };
+    xhr.timeout = 300000;
     xhr.send(formData);
   });
+}
+
+// Fetch fallback per quando XHR ha problemi
+async function uploadWithFetch(url, formData, headers){
+  showUploadProgress(50);
+  const r = await fetch(url, { method:'POST', headers: headers||{}, body: formData });
+  hideUploadProgress();
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.error || 'Upload fallito');
+  return d;
 }
 
 // Global upload progress bar
@@ -3775,6 +3822,7 @@ async function renderDMSheet(){
     sheet.innerHTML=`
       <div class="dm-header">
         <div class="dm-header-title">✉️ Messaggi</div>
+        <button onclick="markAllDMRead()" style="background:none;border:1px solid rgba(139,92,246,.2);color:var(--coral);border-radius:20px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--fb)">Segna letti</button>
         <button class="dm-close" onclick="closeDM()">✕</button>
       </div>
       <div class="dm-list" id="dm-conv-list"><div class="spinner"></div></div>`;
@@ -3975,6 +4023,15 @@ function appendDMMessage(m){
   div.innerHTML=renderDMMessage(m);
   el.appendChild(div.firstElementChild||div);
   el.scrollTop=el.scrollHeight;
+}
+
+async function markAllDMRead(){
+  try{
+    await POST('/api/messages/mark-all-read');
+    toast('Tutti i messaggi segnati come letti');
+    updateDMBadge();
+    renderDMSheet();
+  }catch(e){toast(e.message||'Errore','error');}
 }
 
 async function updateDMBadge(){

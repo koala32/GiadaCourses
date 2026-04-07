@@ -72,6 +72,18 @@ module.exports = function(app) {
     catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  // ── Segna tutti i messaggi come letti ──
+  app.post('/api/messages/mark-all-read', requireAuth, async (req, res) => {
+    try {
+      const updated = await db.messages.updateAsync(
+        { toId: req.user._id, read: false, groupId: { $exists: false } },
+        { $set: { read: true } },
+        { multi: true }
+      );
+      res.json({ ok: true, count: updated });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   app.get('/api/messages/:userId', requireAuth, async (req, res) => {
     try {
       const myId=req.user._id, otherId=req.params.userId;

@@ -15,13 +15,28 @@ async function notifyBellUsers(authorId, event, data) {
 
 module.exports = function(app) {
 
+  // ── Multer error handler (returns JSON, not HTML) ──
+  function handleUpload(fieldName) {
+    return (req, res, next) => {
+      const up = upload.single(fieldName);
+      up(req, res, (err) => {
+        if (err) {
+          const msg = err.code === 'LIMIT_FILE_SIZE' ? 'File troppo grande (max 200MB)'
+            : err.message || 'Errore durante il caricamento';
+          return res.status(400).json({ error: msg });
+        }
+        next();
+      });
+    };
+  }
+
   // ── UPLOAD MEDIA ──
-  app.post('/api/media/upload-pdf', requireAuth, requireRole('admin','superadmin'), upload.single('file'), (req, res) => {
+  app.post('/api/media/upload-pdf', requireAuth, requireRole('admin','superadmin'), handleUpload('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nessun file' });
     res.json({ url: '/uploads/' + req.file.filename });
   });
 
-  app.post('/api/media/upload', requireAuth, upload.single('file'), (req, res) => {
+  app.post('/api/media/upload', requireAuth, handleUpload('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Nessun file ricevuto' });
     const ext = path.extname(req.file.filename).toLowerCase().replace('.','');
     res.json({ url: '/uploads/' + req.file.filename, type: ALLOWED_VID.test(ext) ? 'video' : 'image' });

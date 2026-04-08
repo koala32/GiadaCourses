@@ -741,7 +741,7 @@ function renderReelPreviews(){
     var m = pendingReelMedia[i];
     html += '<div style="position:relative;flex-shrink:0;width:90px;height:90px;border-radius:10px;overflow:hidden;background:#000">';
     if(m.type === 'image'){
-      html += '<img src="'+m.url+'" style="width:100%;height:100%;object-fit:cover">';
+      html += '<img src="'+m.url+'" loading="lazy" style="width:100%;height:100%;object-fit:cover">';
     } else {
       html += '<video src="'+m.url+'" style="width:100%;height:100%;object-fit:cover" muted></video>';
       html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8);font-size:1.2rem;background:rgba(0,0,0,.2)">&#9654;</div>';
@@ -2132,7 +2132,7 @@ async function loadAdminTickets(status){
           <span style="font-size:.7rem;color:var(--muted)">${timeAgo(t.timestamp)}</span>
         </div>
         <div style="font-size:.84rem;line-height:1.5;margin-bottom:8px">${escHTML(t.text)}</div>
-        ${t.screenshotUrl?`<img src="${t.screenshotUrl}" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="openLightbox('${t.screenshotUrl}')">`:''}
+        ${t.screenshotUrl?`<img src="${t.screenshotUrl}" loading="lazy" style="max-width:100%;max-height:200px;border-radius:8px;margin-bottom:8px;cursor:pointer" onclick="openLightbox('${t.screenshotUrl}')">`:''}
         <div style="font-size:.7rem;color:var(--muted);margin-bottom:8px">Dispositivo: ${escHTML((t.device||'').substring(0,60))} | Pagina: ${escHTML(t.page||'?')}</div>
         <div style="display:flex;gap:6px">
           ${t.status==='open'?`

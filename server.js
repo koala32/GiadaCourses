@@ -84,12 +84,22 @@ function serverLog(level, ...args) {
 process.on('uncaughtException', err => serverLog('error', 'Uncaught:', err.message));
 process.on('unhandledRejection', reason => serverLog('warn', 'Unhandled:', reason));
 
+// ── GZIP Compression (riduce traffico ~70%) ──
+let compression;
+try { compression = require('compression'); } catch { compression = null; }
+if (compression) {
+  app.use(compression({ level: 6, threshold: 1024, filter: (req) => !req.path.startsWith('/api/events') }));
+  console.log('[PERF] GZIP compression attiva');
+} else {
+  console.log('[WARN] compression non installato. Esegui: npm install compression');
+}
+
 // ── Security + CORS ──
 const ALLOWED_ORIGINS = setupSecurity(app);
 
 // ── Body parsers ──
-app.use(express.json({ limit: '20mb' }));
-app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // ── Auth middleware globale ──
 app.use(authMiddleware);
@@ -106,7 +116,17 @@ app.use((req, res, next) => {
   if (reqPath === '/server.js' || reqPath === '/package.json' || reqPath.startsWith('/routes/') || reqPath.startsWith('/lib/') || reqPath.startsWith('/middleware/')) return res.status(403).json({ error: 'Accesso negato' });
   next();
 });
-app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: 'index.html' }));
+// Static files con cache intelligente
+app.use(express.static(path.join(__dirname, 'public'), {
+  dotfiles: 'deny',
+  index: 'index.html',
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) { res.setHeader('Cache-Control', 'no-cache'); }
+    else if (filePath.endsWith('.css') || filePath.endsWith('.js')) { res.setHeader('Cache-Control', 'public, max-age=3600'); }
+    else if (/\.(png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) { res.setHeader('Cache-Control', 'public, max-age=86400'); }
+  }
+}));
 
 // ── Download APK protetto — solo dal sito ──
 app.get('/api/download-apk', (req, res) => {
@@ -140,8 +160,40 @@ require('./routes/learning')(app, socialState);
 
 // ── Ping ──
 app.get('/api/ping', (req, res) => {
-  res.json({ ok: true, ts: Date.now(), version: '10.0-modular', env: 'linux' });
+  res.json({ ok: true, ts: Date.now(), version: '11.1', env: 'linux' });
 });
+
+// ── Health check (pubblico) ──
+app.get('/api/health', (req, res) => {
+  const mem = process.memoryUsage();
+  res.json({
+    status: 'ok',
+    uptime: Math.floor(process.uptime()),
+    memory: Math.round(mem.heapUsed / 1024 / 1024) + 'MB',
+    connections: { sse: sseClients.size, io: ioClients.size },
+  });
+});
+
+// ── Pulizia automatica periodica ──
+setInterval(async () => {
+  try {
+    // Pulisci sessioni scadute (>7 giorni)
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const removed = await db.sessions.removeAsync({ createdAt: { $lt: cutoff } }, { multi: true });
+    if (removed > 0) serverLog('info', `Pulizia: ${removed} sessioni scadute rimosse`);
+    // Pulisci log vecchi (>30 giorni)
+    const logCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const logsRemoved = await db.logs.removeAsync({ timestamp: { $lt: logCutoff } }, { multi: true });
+    if (logsRemoved > 0) serverLog('info', `Pulizia: ${logsRemoved} log vecchi rimossi`);
+    // Pulisci daily missions vecchie (>7 giorni)
+    const dailyCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    await db.daily.removeAsync({ createdAt: { $lt: dailyCutoff } }, { multi: true });
+    // Compatta database
+    for (const [name, store] of Object.entries(db)) {
+      if (store?.persistence?.compactDatafile) store.persistence.compactDatafile();
+    }
+  } catch (e) { serverLog('warn', 'Pulizia periodica errore:', e.message); }
+}, 6 * 60 * 60 * 1000); // Ogni 6 ore
 
 // ── Server status ──
 app.get('/api/server-status', (req, res) => {

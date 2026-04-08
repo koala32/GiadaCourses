@@ -119,20 +119,37 @@ function setupSecurity(app) {
   // Helmet
   if (helmet) {
     app.use(helmet({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "blob:"],
+          connectSrc: ["'self'", "wss:", "ws:"],
+          mediaSrc: ["'self'", "blob:"],
+          workerSrc: ["'self'"],
+          frameSrc: ["'none'"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+          upgradeInsecureRequests: [],
+        },
+      },
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
     }));
   }
 
-  // Security headers
+  // Security headers aggiuntivi
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(), payment=(), usb=()');
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
     next();
   });
 
@@ -154,6 +171,22 @@ function setupSecurity(app) {
     if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
       req.body = sanitizeInput(req.body);
     }
+    // Sanitize URL params (previene path traversal)
+    if (req.params) {
+      for (const [k, v] of Object.entries(req.params)) {
+        if (typeof v === 'string' && (v.includes('..') || v.includes('%2e') || v.includes('%00'))) {
+          return res.status(400).json({ error: 'Parametro non valido' });
+        }
+      }
+    }
+    // Sanitize query params
+    if (req.query) {
+      for (const [k, v] of Object.entries(req.query)) {
+        if (typeof v === 'string' && v.length > 500) {
+          req.query[k] = v.slice(0, 500);
+        }
+      }
+    }
     next();
   });
 
@@ -161,9 +194,13 @@ function setupSecurity(app) {
   if (rateLimit) {
     app.use('/api/auth/login', rateLimit({ windowMs: 15*60*1000, max: 8, message: { error: 'Troppi tentativi. Riprova tra 15 minuti.' }, standardHeaders: true, legacyHeaders: false }));
     app.use('/api/auth/register', rateLimit({ windowMs: 60*60*1000, max: 4, message: { error: 'Troppe registrazioni. Riprova tra un\'ora.' }, standardHeaders: true, legacyHeaders: false }));
+    app.use('/api/auth/forgot-password', rateLimit({ windowMs: 15*60*1000, max: 3, message: { error: 'Troppe richieste reset password.' } }));
     app.use('/api/media/', rateLimit({ windowMs: 60*1000, max: 20, message: { error: 'Troppi upload.' } }));
-    app.use('/api/', rateLimit({ windowMs: 60*1000, max: 180, message: { error: 'Troppe richieste.' } }));
-    console.log('[OK] Rate limiting attivo (hardened)');
+    app.use('/api/calls/', rateLimit({ windowMs: 60*1000, max: 30, message: { error: 'Troppe richieste chiamata.' } }));
+    app.use('/api/challenges/', rateLimit({ windowMs: 60*1000, max: 20, message: { error: 'Troppe richieste sfida.' } }));
+    app.use('/api/bug-report', rateLimit({ windowMs: 60*60*1000, max: 5, message: { error: 'Troppe segnalazioni. Riprova piu tardi.' } }));
+    app.use('/api/', rateLimit({ windowMs: 60*1000, max: 200, message: { error: 'Troppe richieste.' } }));
+    console.log('[OK] Rate limiting attivo (hardened v2)');
   } else {
     console.log('[WARN] express-rate-limit non installato. Esegui: npm install express-rate-limit helmet');
   }

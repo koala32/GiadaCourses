@@ -2258,12 +2258,6 @@ async function renderGames(){
         <div class="game-desc">Completa le frasi scegliendo la parola giusta</div>
         <div class="game-xp">+15 XP / frase</div>
       </div>
-      <div class="game-card" onclick="startHangman()">
-        <div class="game-icon">&#x1F3AF;</div>
-        <div class="game-title">Hangman</div>
-        <div class="game-desc">Indovina la parola una lettera alla volta</div>
-        <div class="game-xp">+20 XP / parola</div>
-      </div>
     </div>
 
     <div id="game-arena" style="display:none"></div>
@@ -2519,91 +2513,6 @@ function quitGame(){
   const lvlSelect=document.querySelector('.games-level-select');
   if(gamesGrid)gamesGrid.style.display='';
   if(lvlSelect)lvlSelect.style.display='';
-}
-
-// ── HANGMAN GAME ──
-let _hangmanState = null;
-
-async function startHangman(){
-  const level=getGameLevel();
-  try{
-    const d=await GET('/api/games/hangman?level='+level);
-    _hangmanState = { gameId:d.gameId, hint:d.hint, translation:d.translation, length:d.length, guessed:[], wrong:[], won:false, lost:false };
-    renderHangman();
-  }catch(e){toast('Errore: '+e.message,'error');}
-}
-
-function renderHangman(){
-  const g=_hangmanState; if(!g)return;
-  const arena=document.getElementById('game-arena');
-  const gamesGrid=document.querySelector('.games-grid');
-  const lvlSelect=document.querySelector('.games-level-select');
-  if(gamesGrid)gamesGrid.style.display='none';
-  if(lvlSelect)lvlSelect.style.display='none';
-  arena.style.display='block';
-
-  // Build word display
-  const revealed = g.revealed || '_'.repeat(g.length);
-  const wordDisplay = revealed.split('').map(l => `<span style="display:inline-block;width:28px;height:38px;border-bottom:2px solid ${l==='_'?'var(--coral)':'var(--green)'};margin:0 3px;text-align:center;font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--text);line-height:38px">${l==='_'?' ':l}</span>`).join('');
-
-  // Hangman figure (SVG based on wrong count)
-  const w = g.wrong.length;
-  const parts = [
-    w>=1?'<circle cx="50" cy="25" r="10" fill="none" stroke="var(--coral)" stroke-width="2"/>':'',
-    w>=2?'<line x1="50" y1="35" x2="50" y2="65" stroke="var(--coral)" stroke-width="2"/>':'',
-    w>=3?'<line x1="50" y1="45" x2="35" y2="55" stroke="var(--coral)" stroke-width="2"/>':'',
-    w>=4?'<line x1="50" y1="45" x2="65" y2="55" stroke="var(--coral)" stroke-width="2"/>':'',
-    w>=5?'<line x1="50" y1="65" x2="38" y2="80" stroke="var(--coral)" stroke-width="2"/>':'',
-    w>=6?'<line x1="50" y1="65" x2="62" y2="80" stroke="var(--coral)" stroke-width="2"/>':'',
-  ];
-  const hangmanSVG = `<svg viewBox="0 0 100 90" width="120" style="margin:0 auto;display:block">
-    <line x1="10" y1="88" x2="90" y2="88" stroke="var(--muted)" stroke-width="1.5"/>
-    <line x1="30" y1="88" x2="30" y2="5" stroke="var(--muted)" stroke-width="1.5"/>
-    <line x1="30" y1="5" x2="50" y2="5" stroke="var(--muted)" stroke-width="1.5"/>
-    <line x1="50" y1="5" x2="50" y2="15" stroke="var(--muted)" stroke-width="1.5"/>
-    ${parts.join('')}
-  </svg>`;
-
-  // Keyboard
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const keyboard = alphabet.map(l => {
-    const used = g.guessed.includes(l);
-    const isWrong = g.wrong.includes(l);
-    const isCorrect = used && !isWrong;
-    const disabled = used || g.won || g.lost;
-    return `<button onclick="guessHangman('${l}')" style="width:32px;height:36px;border-radius:8px;border:1.5px solid ${isWrong?'rgba(239,68,68,.3)':isCorrect?'rgba(34,197,94,.3)':'rgba(139,92,246,.12)'};background:${isWrong?'rgba(239,68,68,.06)':isCorrect?'rgba(34,197,94,.06)':'#fff'};color:${isWrong?'#EF4444':isCorrect?'var(--green)':'var(--text)'};font-weight:700;font-size:.82rem;cursor:${disabled?'default':'pointer'};opacity:${disabled&&!isCorrect&&!isWrong?'.3':'1'};font-family:var(--fb)" ${disabled?'disabled':''}>${l}</button>`;
-  }).join('');
-
-  arena.innerHTML=`
-    <div class="game-header">
-      <span class="game-progress">${6-w} vite rimaste</span>
-      <button class="game-quit" onclick="quitGame();_hangmanState=null">&#x2715; Esci</button>
-    </div>
-    <div class="game-play-card" style="text-align:center">
-      ${hangmanSVG}
-      <div style="margin:16px 0;font-size:.82rem;color:var(--muted)">Indizio: <strong style="color:var(--coral)">${escHTML(g.hint)}</strong> (${escHTML(g.translation)})</div>
-      <div style="margin:16px 0;letter-spacing:2px">${wordDisplay}</div>
-      ${g.won?`<div style="background:rgba(34,197,94,.08);border-radius:12px;padding:14px;margin:14px 0;font-weight:700;color:var(--green);font-size:.95rem">Hai indovinato! +20 XP</div>`
-        :g.lost?`<div style="background:rgba(239,68,68,.08);border-radius:12px;padding:14px;margin:14px 0;font-weight:700;color:#EF4444;font-size:.95rem">La parola era: <strong>${escHTML(g.word||'')}</strong></div>`
-        :`<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin-top:14px">${keyboard}</div>`}
-      ${g.won||g.lost?`<div style="display:flex;gap:8px;margin-top:14px"><button class="btn-primary btn-sm" onclick="startHangman()" style="flex:1">Gioca ancora</button><button class="btn-secondary btn-sm" onclick="quitGame();_hangmanState=null" style="flex:1">Torna ai giochi</button></div>`:''}
-    </div>`;
-  checkDailyMission('games');
-}
-
-async function guessHangman(letter){
-  const g=_hangmanState; if(!g||g.won||g.lost)return;
-  try{
-    const r = await POST('/api/games/hangman/guess',{gameId:g.gameId,letter});
-    g.guessed.push(letter);
-    g.revealed = r.revealed;
-    g.wrong = r.wrong;
-    g.won = r.won;
-    g.lost = r.lost;
-    if(r.word) g.word = r.word;
-    if(r.xpEarned && ME) ME.xp = (ME.xp||0) + r.xpEarned;
-    renderHangman();
-  }catch(e){toast(e.message,'error');}
 }
 
 // ── LISTENING QUIZ (Web Speech API) ──
@@ -4782,7 +4691,14 @@ async function callUser(uid,username,avatar,videoEnabled=false){
     // ── Set ALL handlers BEFORE any SDP operation ──
     pc.onicecandidate=e=>{
       if(!e.candidate)return;
-      if(_callIdKnown) POST('/api/calls/ice',{callId:_callIdKnown,candidate:e.candidate,targetUserId:uid}).catch(()=>{});
+      if(_callIdKnown){
+        // Socket.IO primario (bassa latenza), HTTP fallback
+        if(ioSocket&&ioSocket.connected){
+          ioSocket.emit('call:ice',{callId:_callIdKnown,candidate:e.candidate,targetUserId:uid});
+        } else {
+          POST('/api/calls/ice',{callId:_callIdKnown,candidate:e.candidate,targetUserId:uid}).catch(()=>{});
+        }
+      }
       else _earlyIce.push(e.candidate);
     };
     pc.ontrack=e=>{
@@ -4863,7 +4779,10 @@ async function callUser(uid,username,avatar,videoEnabled=false){
     }
 
     // Drain early ICE candidates now that callId is known
-    for(const c of _earlyIce) POST('/api/calls/ice',{callId,candidate:c,targetUserId:uid}).catch(()=>{});
+    for(const c of _earlyIce){
+      if(ioSocket&&ioSocket.connected) ioSocket.emit('call:ice',{callId,candidate:c,targetUserId:uid});
+      else POST('/api/calls/ice',{callId,candidate:c,targetUserId:uid}).catch(()=>{});
+    }
     // Also drain any remote ICE that arrived via SSE before callState was set
     if(_pendingIce.has(callId)){
       for(const c of _pendingIce.get(callId)) try{await pc.addIceCandidate(new RTCIceCandidate(c));}catch{}
@@ -6184,7 +6103,13 @@ async function callAccept(callId,fromId,fromName,fromAvatar,videoEnabled,offer){
 
     // ── Set ALL handlers BEFORE any SDP operation ──
     pc.onicecandidate=e=>{
-      if(e.candidate) POST('/api/calls/ice',{callId,candidate:e.candidate,targetUserId:fromId}).catch(()=>{});
+      if(e.candidate){
+        if(ioSocket&&ioSocket.connected){
+          ioSocket.emit('call:ice',{callId,candidate:e.candidate,targetUserId:fromId});
+        } else {
+          POST('/api/calls/ice',{callId,candidate:e.candidate,targetUserId:fromId}).catch(()=>{});
+        }
+      }
     };
     pc.ontrack=e=>{
       const rv=document.getElementById('call-remote-video');

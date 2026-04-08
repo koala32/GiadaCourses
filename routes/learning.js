@@ -46,7 +46,6 @@ const WORD_SCRAMBLE = {
   B2: [{w:'ACHIEVEMENT',h:'Something accomplished',it:'Risultato'},{w:'ENVIRONMENT',h:'Nature around us',it:'Ambiente'},{w:'OPPORTUNITY',h:'A chance',it:'Opportunita'},{w:'RESPONSIBLE',h:'In charge of',it:'Responsabile'},{w:'COMFORTABLE',h:'Feeling at ease',it:'Comodo'},{w:'INDEPENDENT',h:'Not needing help',it:'Indipendente'},{w:'COMMUNICATE',h:'Share information',it:'Comunicare'},{w:'TEMPERATURE',h:'How hot or cold',it:'Temperatura'}],
 };
 
-const HANGMAN_WORDS = WORD_SCRAMBLE; // Same word pool, different game mechanic
 
 const SPEED_MATCH = {
   A1: [{en:'Dog',it:'Cane'},{en:'Cat',it:'Gatto'},{en:'House',it:'Casa'},{en:'Book',it:'Libro'},{en:'Car',it:'Macchina'},{en:'Sun',it:'Sole'},{en:'Moon',it:'Luna'},{en:'Tree',it:'Albero'},{en:'Food',it:'Cibo'},{en:'Hand',it:'Mano'},{en:'Eye',it:'Occhio'},{en:'Door',it:'Porta'}],
@@ -241,40 +240,6 @@ module.exports = function(app, sharedState) {
     if (xpEarned > 0) await db.users.updateAsync({ _id: req.user._id }, { $inc: { xp: xpEarned } });
     _gameState.delete('lq_' + req.body.gameId);
     res.json({ score, total: game.answers.length, results, xpEarned });
-  });
-
-  // ── HANGMAN GAME ──
-  app.get('/api/games/hangman', (req, res) => {
-    const level = req.query.level || 'A1';
-    const pool = HANGMAN_WORDS[level] || HANGMAN_WORDS['A1'];
-    const word = pool[Math.floor(Math.random() * pool.length)];
-    const gameId = crypto.randomBytes(6).toString('hex');
-    _gameState.set('hm_' + gameId, { word: word.w.toUpperCase(), hint: word.h, it: word.it, createdAt: Date.now() });
-    setTimeout(() => _gameState.delete('hm_' + gameId), 600000);
-    res.json({ gameId, hint: word.h, translation: word.it, length: word.w.length, level });
-  });
-
-  app.post('/api/games/hangman/guess', requireAuth, async (req, res) => {
-    const game = _gameState.get('hm_' + req.body.gameId);
-    if (!game) return res.status(404).json({ error: 'Partita scaduta' });
-    const letter = (req.body.letter || '').toUpperCase();
-    if (!letter || letter.length !== 1) return res.status(400).json({ error: 'Lettera non valida' });
-    const found = game.word.includes(letter);
-    if (!game.guessed) game.guessed = [];
-    if (!game.guessed.includes(letter)) game.guessed.push(letter);
-    const wrong = game.guessed.filter(l => !game.word.includes(l));
-    const revealed = game.word.split('').map(l => game.guessed.includes(l) ? l : '_').join('');
-    const won = !revealed.includes('_');
-    const lost = wrong.length >= 6;
-    let xpEarned = 0;
-    if (won) {
-      xpEarned = 20;
-      await db.users.updateAsync({ _id: req.user._id }, { $inc: { xp: xpEarned } });
-      _gameState.delete('hm_' + req.body.gameId);
-    } else if (lost) {
-      _gameState.delete('hm_' + req.body.gameId);
-    }
-    res.json({ found, revealed, wrong, wrongCount: wrong.length, won, lost, xpEarned, word: lost ? game.word : undefined });
   });
 
   // ============================================================

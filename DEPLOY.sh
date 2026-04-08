@@ -109,13 +109,14 @@ fi
 info "6/10 Deploy pulito (preserva database e uploads)..."
 mkdir -p "$APP_DIR"
 
-# Salva temporaneamente uploads e database
+# Salva temporaneamente uploads, database e .env
 SAVE_DIR=$(mktemp -d)
 [ -d "$APP_DIR/uploads"  ] && mv "$APP_DIR/uploads"  "$SAVE_DIR/uploads"  2>/dev/null || true
 [ -d "$APP_DIR/database" ] && mv "$APP_DIR/database" "$SAVE_DIR/database" 2>/dev/null || true
+[ -f "$APP_DIR/.env"     ] && cp "$APP_DIR/.env"     "$SAVE_DIR/.env"     2>/dev/null || true
 
-# Rimuovi SOLO i file di codice alla radice (non le cartelle dati)
-find "$APP_DIR" -maxdepth 1 -type f -delete 2>/dev/null || true
+# Rimuovi SOLO i file di codice alla radice (PRESERVA .env)
+find "$APP_DIR" -maxdepth 1 -type f ! -name '.env' -delete 2>/dev/null || true
 # Rimuovi vecchie cartelle di codice (saranno ricreate)
 rm -rf "$APP_DIR/node_modules" "$APP_DIR/routes" "$APP_DIR/lib" "$APP_DIR/middleware" "$APP_DIR/public" 2>/dev/null || true
 
@@ -155,6 +156,11 @@ fi
 if [ -d "$SAVE_DIR/database" ]; then
   mv "$SAVE_DIR/database/"* "$APP_DIR/database/" 2>/dev/null || true
   log "Database ripristinato"
+fi
+# Ripristina .env (credenziali SMTP, VAPID, TURN)
+if [ -f "$SAVE_DIR/.env" ] && [ ! -f "$APP_DIR/.env" ]; then
+  cp "$SAVE_DIR/.env" "$APP_DIR/.env"
+  log ".env ripristinato (SMTP, VAPID, TURN)"
 fi
 
 # Cleanup temporanei

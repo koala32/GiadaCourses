@@ -206,8 +206,71 @@ io.on('connection', (socket) => {
   socket.join('user:' + uid);
 
 
-  // ── Chiamate e Sfide: gestite via HTTP routes in routes/social.js ──
-  // Socket.IO usato solo per ricezione eventi (non invio)
+  // ── Chiamate: Socket.IO relay per ICE (bassa latenza, NO doppio invio) ──
+  socket.on('call:ice', (data) => {
+    if (!data.targetUserId || !data.candidate) return;
+    const targetUid = String(data.targetUserId);
+    // Invia SOLO via Socket.IO al target (evita doppia consegna)
+    const targetSockets = ioClients.get(targetUid);
+    if (targetSockets && targetSockets.size) {
+      for (const s of targetSockets) {
+        try { s.emit('call_ice', { callId: data.callId, candidate: data.candidate, from: uid }); } catch {}
+      }
+    } else {
+      // Fallback SSE se target non ha Socket.IO
+      const sseSet = sseClients.get(targetUid);
+      if (sseSet && sseSet.size) {
+        const payload = `event: call_ice\ndata: ${JSON.stringify({ callId: data.callId, candidate: data.candidate, from: uid })}\n\n`;
+        for (const res of sseSet) { try { res.write(payload); } catch {} }
+      }
+    }
+  });
+  socket.on('call:answer', (data) => {
+    const call = socialState.activeCalls?.get(data.callId);
+    if (call) {
+      call.answered = true;
+      sseEmit(call.callerId, 'call_answer', { callId: data.callId, answer: data.answer, from: uid });
+    }
+  });
+  socket.on('call:reject', (data) => {
+    const call = socialState.activeCalls?.get(data.callId);
+    if (call) {
+      sseEmit(call.callerId, 'call_rejected', { callId: data.callId });
+      socialState.activeCalls.delete(data.callId);
+    }
+  });
+  socket.on('call:end', (data) => {
+    const call = socialState.activeCalls?.get(data.callId);
+    if (call) {
+      sseEmit(call.callerId, 'call_ended', { callId: data.callId });
+      sseEmit(call.calleeId, 'call_ended', { callId: data.callId });
+      socialState.activeCalls.delete(data.callId);
+    }
+  });
+  socket.on('call:ice_flush', (data) => {
+    // Trigger immediate ICE delivery via Socket.IO
+    if (data.targetUserId && data.callId) {
+      const targetSockets = ioClients.get(String(data.targetUserId));
+      if (targetSockets) targetSockets.forEach(s => { try { s.emit('call_ice_flush', { callId: data.callId }); } catch {} });
+    }
+  });
+
+  // ── Sfide: Socket.IO relay per accettazione/rifiuto rapido ──
+  socket.on('challenge:accept', (data) => {
+    const ch = socialState.activeChallenges?.get(data.challengeId);
+    if (ch && ch.challengeeId === uid && ch.status === 'pending') {
+      ch.status = 'active'; ch.startedAt = Date.now();
+      sseEmit(ch.challengerId, 'challenge_started', { challengeId: ch.id, questions: socialState.safeQuestions(ch.questions) });
+      socket.emit('challenge:started', { challengeId: ch.id, questions: socialState.safeQuestions(ch.questions) });
+    }
+  });
+  socket.on('challenge:reject', (data) => {
+    const ch = socialState.activeChallenges?.get(data.challengeId);
+    if (ch) {
+      sseEmit(ch.challengerId, 'challenge_rejected', { challengeId: ch.id });
+      socialState.activeChallenges.delete(ch.id);
+    }
+  });
 
   // ── LIVE via Socket.IO ──
   socket.on('live:ice', (data) => {

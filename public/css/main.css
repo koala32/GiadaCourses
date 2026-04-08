@@ -484,6 +484,14 @@ video.story-media-fullscreen{object-fit:cover;}
 .story-viewer-close{position:absolute;top:calc(14px + var(--sat,0px));right:12px;background:rgba(0,0,0,.4);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:1rem;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;}
 .story-caption{position:absolute;bottom:calc(14px + var(--sab,0px));left:0;right:0;padding:50px 18px 18px;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);color:#fff;font-size:.93rem;font-weight:600;z-index:4;line-height:1.45;}
 .story-mute-btn{position:absolute;bottom:calc(20px + var(--sab,0px));right:14px;background:rgba(0,0,0,.45);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:.95rem;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;}
+.story-qbox{position:absolute;bottom:calc(14px + var(--sab,0px));left:12px;right:12px;z-index:8;background:rgba(0,0,0,.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:18px;padding:14px 16px;border:1px solid rgba(255,255,255,.1);}
+.story-qbox-own{pointer-events:none;}
+.story-qbox-label{color:#fff;font-family:var(--fh);font-size:.92rem;font-weight:700;text-align:center;margin-bottom:10px;}
+.story-qbox-input-row{display:flex;gap:8px;}
+.story-qbox-input{flex:1;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:10px 16px;color:#fff;font-family:var(--fb);font-size:.84rem;outline:none;}
+.story-qbox-input::placeholder{color:rgba(255,255,255,.4);}
+.story-qbox-input:focus{border-color:rgba(139,92,246,.5);background:rgba(255,255,255,.18);}
+.story-qbox-send{background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;border:none;border-radius:24px;padding:10px 18px;font-family:var(--fb);font-weight:700;font-size:.82rem;cursor:pointer;flex-shrink:0;}
 .story-tap-zone{position:absolute;top:0;height:100%;z-index:3;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 .story-tap-left{left:0;width:38%;}
 .story-tap-right{right:0;width:38%;}

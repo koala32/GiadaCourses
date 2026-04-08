@@ -124,6 +124,7 @@ module.exports = function(app) {
         duration: Math.min(15, Math.max(3, parseInt(req.body.duration) || 15)),
         music: (req.body.music && req.body.music !== 'none') ? req.body.music : null,
         musicTitle: (req.body.music && req.body.music !== 'none') ? (req.body.musicTitle || '') : '',
+        questionBox: (req.body.questionBox || '').trim().slice(0, 100) || null,
         textOverlays, timestamp: Date.now(), views: [],
       });
       sseBroadcast('new_story', { storyId: story._id, userId: req.user._id, username: req.user.username, avatar: req.user.avatar });
@@ -137,6 +138,27 @@ module.exports = function(app) {
     if (!story) return res.status(404).json({ error: 'Non trovata' });
     if (!(story.views || []).includes(req.user._id)) await db.stories.updateAsync({ _id: req.params.id }, { $set: { views: [...(story.views||[]), req.user._id] } });
     res.json({ ok: true });
+  });
+
+  // ── Rispondi alla storia (invia DM al creatore) ──
+  app.post('/api/stories/:id/reply', requireAuth, async (req, res) => {
+    try {
+      const story = await db.stories.findOneAsync({ _id: req.params.id });
+      if (!story) return res.status(404).json({ error: 'Storia non trovata' });
+      if (story.userId === req.user._id) return res.status(400).json({ error: 'Non puoi rispondere alla tua storia' });
+      const text = (req.body.text || '').trim();
+      if (!text) return res.status(400).json({ error: 'Messaggio vuoto' });
+      if (text.length > 500) return res.status(400).json({ error: 'Messaggio troppo lungo' });
+      // Invia come DM al creatore della storia
+      const msg = await db.messages.insertAsync({
+        fromId: req.user._id, toId: story.userId,
+        text: '💬 Risposta alla tua storia: ' + text,
+        timestamp: Date.now(), read: false,
+        storyReply: { storyId: story._id, mediaUrl: story.mediaUrl || null, questionBox: story.questionBox || null },
+      });
+      sseEmit(story.userId, 'new_dm', { from: req.user._id, fromName: req.user.username, fromAvatar: req.user.avatar || '', text: msg.text, storyReply: true });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
   app.delete('/api/stories/:id', requireAuth, async (req, res) => {

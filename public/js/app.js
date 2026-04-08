@@ -3424,6 +3424,12 @@ function openStoryCreator(){
   h += '<div style="display:flex;gap:8px;margin-bottom:16px">';
   h += '<button onclick="addStoryText()" class="sc-pill-btn" style="flex:1">Testo</button>';
   h += '<button onclick="openStoryTagPicker()" class="sc-pill-btn" style="flex:1">Tag</button>';
+  h += '<button onclick="toggleStoryQuestionBox()" class="sc-pill-btn" id="sc-qbox-btn" style="flex:1">Chiedimi</button>';
+  h += '</div>';
+  h += '<div id="sc-qbox-wrap" style="display:none;margin-bottom:16px">';
+  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Riquadro Domande</div>';
+  h += '<input type="text" id="sc-qbox-text" placeholder="Es: Fammi una domanda..." value="Fammi una domanda" maxlength="100" style="width:100%;border:1.5px solid rgba(255,255,255,.15);border-radius:16px;padding:10px 14px;font-family:var(--fb);font-size:.84rem;outline:none;background:rgba(255,255,255,.08);color:#fff">';
+  h += '<div style="font-size:.68rem;color:rgba(255,255,255,.3);margin-top:4px">Chi vede la tua storia potra rispondere e il messaggio ti arrivera in DM</div>';
   h += '</div>';
   // Templates (inside panel)
   h += '<div id="sc-templates-wrap" style="display:none;margin-bottom:16px">';
@@ -3809,6 +3815,15 @@ function handleStoryMedia(input,type){
   }
 }
 
+function toggleStoryQuestionBox(){
+  const wrap=document.getElementById('sc-qbox-wrap');
+  const btn=document.getElementById('sc-qbox-btn');
+  if(!wrap)return;
+  const show=wrap.style.display==='none';
+  wrap.style.display=show?'block':'none';
+  if(btn) btn.style.background=show?'var(--coral)':'';
+}
+
 async function publishStory(){
   const hasBgTemplate = window._storyBgTemplate && !pendingStoryMedia;
   if(!pendingStoryMedia && !hasBgTemplate){toast('Seleziona una foto, video o scegli uno sfondo!','error');return;}
@@ -3827,6 +3842,9 @@ async function publishStory(){
     fd.append('music',storySelectedMusic||'none');
     fd.append('musicTitle',storySelectedMusicTitle||'');
     if(storyTextLayers.length) fd.append('textOverlays',JSON.stringify(storyTextLayers));
+    const qbox=document.getElementById('sc-qbox-text');
+    const qboxWrap=document.getElementById('sc-qbox-wrap');
+    if(qbox&&qboxWrap&&qboxWrap.style.display!=='none'&&qbox.value.trim()) fd.append('questionBox',qbox.value.trim());
     const tok=localStorage.getItem('gc_token');
     const d = await uploadWithProgress('/api/stories', fd, {'Authorization':'Bearer '+tok});
     window._storyBgTemplate=null;
@@ -3901,6 +3919,21 @@ function showStory(){
       </div>
     </div>
     ${story.caption?`<div class="story-caption">${escHTML(story.caption)}</div>`:''}
+    ${story.questionBox&&ME&&ME._id!==group.user._id?`
+      <div class="story-qbox" id="sv-qbox">
+        <div class="story-qbox-label">${escHTML(story.questionBox)}</div>
+        <div class="story-qbox-input-row">
+          <input type="text" id="sv-qbox-input" class="story-qbox-input" placeholder="Scrivi la tua risposta..." maxlength="500" onkeydown="if(event.key==='Enter'){event.preventDefault();sendStoryReply('${story._id}');}">
+          <button onclick="sendStoryReply('${story._id}')" class="story-qbox-send">Invia</button>
+        </div>
+      </div>
+    `:''}
+    ${story.questionBox&&ME&&ME._id===group.user._id?`
+      <div class="story-qbox story-qbox-own">
+        <div class="story-qbox-label">${escHTML(story.questionBox)}</div>
+        <div style="font-size:.7rem;opacity:.5;margin-top:4px">Le risposte ti arrivano in DM</div>
+      </div>
+    `:''}
     <button class="story-viewer-close" onclick="closeStory()">✕</button>
     ${story.mediaType==='video'?`<button class="story-mute-btn" id="sv-mute" onclick="svToggleMute()" title="Audio">${svMuted?'🔇':'🔊'}</button>`:''}
     ${ME&&(ME._id===group.user._id||['admin','superadmin'].includes(ME.role))
@@ -3910,6 +3943,13 @@ function showStory(){
     <div class="story-pause-indicator" id="sv-pause-ind">⏸</div>`;
 
   document.body.appendChild(viewer);
+
+  // Pausa storia quando si scrive nel riquadro domande
+  const qInput=viewer.querySelector('#sv-qbox-input');
+  if(qInput){
+    qInput.addEventListener('focus',()=>{clearTimeout(storyTimer);const bar=document.getElementById('spf-'+currentStoryIdx);if(bar)bar.style.animationPlayState='paused';});
+    qInput.addEventListener('blur',()=>{const dur=(story.duration||15)*1000;const bar=document.getElementById('spf-'+currentStoryIdx);if(bar)bar.style.animationPlayState='running';storyTimer=setTimeout(nextStory,dur);});
+  }
 
   // Play story music if present
   if(story.music && story.music!=='none' && (story.music.startsWith('http')||story.music.startsWith('/'))){
@@ -4004,6 +4044,19 @@ function nextStory(){
 }
 function prevStory(){ if(currentStoryIdx>0){currentStoryIdx--;showStory();} }
 function closeStory(){ clearTimeout(storyTimer); storyPauseStart=0; stopStoryViewerMusic(); document.getElementById('story-viewer')?.remove(); }
+
+async function sendStoryReply(storyId){
+  const input=document.getElementById('sv-qbox-input');
+  if(!input||!input.value.trim())return;
+  const text=input.value.trim();
+  input.value='';input.disabled=true;
+  try{
+    await POST('/api/stories/'+storyId+'/reply',{text});
+    const qbox=document.getElementById('sv-qbox');
+    if(qbox) qbox.innerHTML='<div style="text-align:center;padding:12px;color:#fff;font-size:.85rem;font-weight:600">Risposta inviata!</div>';
+    toast('Risposta inviata in DM!');
+  }catch(e){toast(e.message||'Errore','error');input.disabled=false;}
+}
 
 /* ── Story pause on hold ── */
 let storyPauseStart=0, storyHoldTimeout=null;

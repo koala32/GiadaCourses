@@ -4672,6 +4672,7 @@ async function loadIceConfig(){
 
 async function callUser(uid,username,avatar,videoEnabled=false){
   if(!ME){openAuth();return;}
+  if(!IS_NATIVE_APK){toast('Le chiamate sono disponibili solo nell\'app Android','info');return;}
   if(callState){toast('Sei già in una chiamata','error');return;}
   if(!navigator.mediaDevices?.getUserMedia){toast('Chiamate non disponibili su questo browser','error');return;}
   await loadIceConfig();
@@ -4731,32 +4732,32 @@ async function callUser(uid,username,avatar,videoEnabled=false){
         if(lbl)lbl.textContent='🔄 Connessione...';
       } else if(s==='disconnected'){
         if(lbl)lbl.textContent='⚠️ Segnale instabile...';
-        // Prova ICE restart dopo 3s se ancora disconnesso
         setTimeout(()=>{
           if(callState?.pc===pc&&pc.connectionState==='disconnected'){
-            try{pc.restartIce?.();}catch{}
-            // Rinegozia se ICE restart non basta
+            try{
+              pc.restartIce?.();
+              pc.createOffer({iceRestart:true}).then(o=>pc.setLocalDescription(o)).catch(()=>{});
+            }catch{}
             setTimeout(()=>{
               if(callState?.pc===pc&&pc.connectionState==='disconnected'){
-                try{
-                  pc.createOffer({iceRestart:true}).then(o=>pc.setLocalDescription(o)).then(()=>{
-                    if(callState) POST('/api/calls/invite',{toUserId:uid,offer:pc.localDescription,videoEnabled,iceRestart:true}).catch(()=>{});
-                  }).catch(()=>{});
-                }catch{}
+                if(lbl)lbl.textContent='⚠️ Riconnessione...';
               }
-            },4000);
+            },5000);
           }
         },3000);
       } else if(s==='failed'){
-        // Tentativo di recupero prima di chiudere
         try{
           pc.restartIce?.();
-          pc.createOffer({iceRestart:true}).then(o=>pc.setLocalDescription(o)).then(()=>{
-            if(callState) POST('/api/calls/invite',{toUserId:uid,offer:pc.localDescription,videoEnabled,iceRestart:true}).catch(()=>{});
-          }).catch(()=>{
+          pc.createOffer({iceRestart:true}).then(o=>pc.setLocalDescription(o)).catch(()=>{
             toast('📵 Connessione persa','error',3000);
             callEnd();
           });
+          setTimeout(()=>{
+            if(callState?.pc===pc&&pc.connectionState==='failed'){
+              toast('📵 Connessione persa','error',3000);
+              callEnd();
+            }
+          },8000);
         }catch{
           toast('📵 Connessione persa','error',3000);
           callEnd();
@@ -5266,6 +5267,7 @@ const QUESTION_TIME_MS = 12000;
 
 function challengeUser(uid, username, avatar) {
   if (!ME) { openAuth(); return; }
+  if (!IS_NATIVE_APK) { toast('Le sfide sono disponibili solo nell\'app Android', 'info'); return; }
   if (challengeState) { toast('Sei già in una sfida!', 'error'); return; }
   POST('/api/challenges/invite', { toUserId: uid })
     .then(d => {
@@ -6141,14 +6143,10 @@ async function callAccept(callId,fromId,fromName,fromAvatar,videoEnabled,offer){
         if(lbl)lbl.textContent='⚠️ Segnale instabile...';
         setTimeout(()=>{
           if(callState?.pc===pc&&pc.connectionState==='disconnected'){
-            try{pc.restartIce?.();}catch{}
-            setTimeout(()=>{
-              if(callState?.pc===pc&&pc.connectionState==='disconnected'){
-                try{pc.createOffer({iceRestart:true}).then(o=>pc.setLocalDescription(o)).then(()=>{
-                  if(callState) POST('/api/calls/ice',{callId,candidate:null,targetUserId:fromId}).catch(()=>{});
-                }).catch(()=>{});}catch{}
-              }
-            },4000);
+            try{
+              pc.restartIce?.();
+              pc.createOffer({iceRestart:true}).then(o=>pc.setLocalDescription(o)).catch(()=>{});
+            }catch{}
           }
         },3000);
       }
@@ -6158,7 +6156,12 @@ async function callAccept(callId,fromId,fromName,fromAvatar,videoEnabled,offer){
           pc.createOffer({iceRestart:true}).then(o=>pc.setLocalDescription(o)).catch(()=>{
             toast('📵 Connessione persa','error',3000);callEnd();
           });
-        }catch{toast('📵 Connessione persa','error',3000);callEnd();}
+          setTimeout(()=>{
+            if(callState?.pc===pc&&pc.connectionState==='failed'){
+              toast('📵 Connessione persa','error',3000);callEnd();
+            }
+          },8000);
+        }catch(e){toast('📵 Connessione persa','error',3000);callEnd();}
       }
     };
 

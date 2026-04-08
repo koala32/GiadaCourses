@@ -468,6 +468,7 @@ input[type=range]{accent-color:var(--coral);}
 .sc-sticker-btn:active{transform:scale(.92);background:rgba(139,92,246,.25);border-color:rgba(139,92,246,.4);}
 .sc-sticker-icon{font-size:1.15rem;line-height:1.2;}
 .sc-sticker-lbl{font-size:.6rem;font-weight:700;font-family:var(--fb);opacity:.7;white-space:nowrap;}
+#story-creator-modal{overscroll-behavior:none;touch-action:pan-y;}
 /* Story viewer */
 /* Story Viewer - full redesign */
 /* Previeni selezione testo nei viewer */

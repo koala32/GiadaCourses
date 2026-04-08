@@ -3396,7 +3396,7 @@ function openStoryCreator(){
   h += '<div id="sc-bottom-bar" style="position:absolute;bottom:0;left:0;right:0;z-index:6;padding:10px 16px calc(14px + var(--sab,0px));background:linear-gradient(to top,rgba(0,0,0,.85),transparent)">';
   h += '<input type="text" id="story-caption" placeholder="Didascalia..." style="width:100%;border:1.5px solid rgba(255,255,255,.15);border-radius:24px;padding:10px 16px;font-family:var(--fb);font-size:.84rem;outline:none;background:rgba(255,255,255,.08);color:#fff;backdrop-filter:blur(6px);margin-bottom:10px">';
   // Sticker tray (appare dopo caricamento media)
-  h += '<div id="sc-sticker-tray" class="sc-sticker-tray" style="display:none">';
+  h += '<div id="sc-sticker-tray" class="sc-sticker-tray">';
   h += '<button class="sc-sticker-btn" onclick="addStoryText()"><span class="sc-sticker-icon">Aa</span><span class="sc-sticker-lbl">Testo</span></button>';
   h += '<button class="sc-sticker-btn" onclick="toggleStoryQuestionBox()" id="sc-qbox-btn"><span class="sc-sticker-icon">&#x1F4AC;</span><span class="sc-sticker-lbl">Chiedimi</span></button>';
   h += '<button class="sc-sticker-btn" onclick="openStoryTagPicker()"><span class="sc-sticker-icon">&#x1F3F7;</span><span class="sc-sticker-lbl">Tag</span></button>';
@@ -3557,10 +3557,12 @@ const STORY_TEMPLATES=[
 ];
 
 function openStoryTemplates(){
-  // Open the options panel first (templates are inside it)
   _storyPanelOpen = true;
   var panel = document.getElementById('sc-options-panel');
-  if(panel) panel.style.transform = 'translateY(0)';
+  if(panel){
+    panel.style.transform = 'translateY(0)';
+    panel.querySelectorAll('.sc-panel-section').forEach(function(s){s.style.display='none';});
+  }
   var wrap=document.getElementById('sc-templates-wrap');
   var grid=document.getElementById('sc-template-grid');
   if(!wrap||!grid)return;
@@ -5305,10 +5307,13 @@ function closeLiveOverlay(){
 let _pty=0,_pulling=false;
 function initPullToRefresh(){
   document.addEventListener('touchstart',e=>{
+    // Disabilita dentro story creator, call overlay, challenge overlay
+    if(document.getElementById('story-creator-modal')||document.getElementById('story-viewer')||document.querySelector('.call-overlay.active')||document.querySelector('.challenge-overlay.active'))return;
     if(document.querySelector('.page.active')?.scrollTop===0) _pty=e.touches[0].clientY;
   },{passive:true});
   document.addEventListener('touchmove',e=>{
-    if(_pty>0&&!_pulling&&(e.touches[0].clientY-_pty)>62){
+    if(document.getElementById('story-creator-modal'))return;
+    if(_pty>0&&!_pulling&&(e.touches[0].clientY-_pty)>80){
       _pulling=true;
       const ind=document.getElementById('ptr-ind')||Object.assign(document.createElement('div'),{id:'ptr-ind'});
       Object.assign(ind.style,{position:'fixed',top:'calc(var(--nav-total,60px) + 8px)',left:'50%',transform:'translateX(-50%)',background:'var(--card-bg)',color:'var(--teal)',padding:'6px 18px',borderRadius:'20px',fontSize:'.8rem',fontWeight:'700',boxShadow:'0 4px 16px rgba(0,0,0,.12)',zIndex:'500',pointerEvents:'none'});

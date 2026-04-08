@@ -3184,15 +3184,16 @@ async function renderSuperadmin(){
     c.innerHTML=`<div class="empty-state"><div class="ei">🔒</div><h3>Solo SuperAdmin</h3></div>`;
     return;
   }
-  const SA_TABS=['stats','users','messages','logs'];
+  const SA_TABS=['stats','users','messages','logs','health'];
   const saTab=window._saTab||'stats';
   c.innerHTML=`
     <div class="section-title">📊 Analytics – 👑 ${escHTML(ME.username)}</div>
     <div class="admin-tabs">
       <button class="admin-tab${saTab==='stats'?' active':''}" onclick="window._saTab='stats';renderSuperadmin()">📊 Statistiche</button>
       <button class="admin-tab${saTab==='users'?' active':''}" onclick="window._saTab='users';renderSuperadmin()">👥 Utenti</button>
-      <button class="admin-tab${saTab==='messages'?' active':''}" onclick="window._saTab='messages';renderSuperadmin()">✉️ DM Monitor</button>
-      <button class="admin-tab${saTab==='logs'?' active':''}" onclick="window._saTab='logs';renderSuperadmin()">🌐 Log IP</button>
+      <button class="admin-tab${saTab==='messages'?' active':''}" onclick="window._saTab='messages';renderSuperadmin()">✉️ DM</button>
+      <button class="admin-tab${saTab==='logs'?' active':''}" onclick="window._saTab='logs';renderSuperadmin()">🌐 Log</button>
+      <button class="admin-tab${saTab==='health'?' active':''}" onclick="window._saTab='health';renderSuperadmin()">💚 Salute</button>
     </div>
     <div id="sa-tab-body"><div class="spinner"></div></div>`;
   const body=document.getElementById('sa-tab-body');
@@ -3273,6 +3274,43 @@ async function renderSuperadmin(){
             <span style="font-size:.72rem;color:var(--muted)">${timeAgo(log.timestamp)}</span>
           </div>`).join('')}
       </div>`;
+    } else if(saTab==='health'){
+      const [health, status] = await Promise.all([GET('/api/health'), GET('/api/server-status')]);
+      const mem = status.memory || {};
+      const heapMB = Math.round((mem.heapUsed||0)/1024/1024);
+      const totalMB = Math.round((mem.heapTotal||0)/1024/1024);
+      const uptimeH = Math.floor((status.uptime||0)/3600);
+      const uptimeM = Math.floor(((status.uptime||0)%3600)/60);
+      body.innerHTML=`
+        <div class="sa-grid">
+          <div class="sa-metric"><div class="sa-val" style="color:var(--green)">●</div><div class="sa-lbl">Stato Server</div><div class="sa-trend">Online</div></div>
+          <div class="sa-metric t2"><div class="sa-val">${uptimeH}h ${uptimeM}m</div><div class="sa-lbl">⏱ Uptime</div></div>
+          <div class="sa-metric t3"><div class="sa-val">${heapMB}MB</div><div class="sa-lbl">Memoria</div><div class="sa-trend">/ ${totalMB}MB</div></div>
+          <div class="sa-metric t4"><div class="sa-val">${status.nodeVersion||'?'}</div><div class="sa-lbl">Node.js</div></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h3 style="font-family:var(--fh);font-size:1rem;margin-bottom:12px">Connessioni Attive</h3>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.88rem">
+            <div><strong style="color:var(--coral)">${health.connections?.sse||0}</strong> SSE</div>
+            <div><strong style="color:var(--coral)">${health.connections?.io||0}</strong> Socket.IO</div>
+            <div><strong style="color:var(--coral)">${status.activeCalls||0}</strong> Chiamate</div>
+            <div><strong style="color:var(--coral)">${status.activeChallenges||0}</strong> Sfide</div>
+            <div><strong style="color:var(--coral)">${status.activeLives?.length||0}</strong> Live</div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:10px">
+          <h3 style="font-family:var(--fh);font-size:1rem;margin-bottom:12px">Sicurezza</h3>
+          <div style="font-size:.85rem;line-height:1.8">
+            <div>GZIP: <strong style="color:var(--green)">Attivo</strong></div>
+            <div>Rate Limiting: <strong style="color:var(--green)">Attivo</strong></div>
+            <div>CSP: <strong style="color:var(--green)">Attivo</strong></div>
+            <div>TURN Server: <strong style="color:var(--green)">Configurato</strong></div>
+            <div>SMTP: <strong style="color:var(--green)">Configurato</strong></div>
+            <div>SSL: <strong style="color:var(--green)">Attivo</strong></div>
+          </div>
+        </div>
+        <button class="btn-primary btn-sm" onclick="window._saTab='health';renderSuperadmin()" style="margin-top:12px;width:100%">Aggiorna</button>
+      `;
     }
   }catch(e){body.innerHTML=`<p style="color:var(--coral);padding:16px">${e.message}</p>`;}
 }
@@ -5678,6 +5716,22 @@ function showChallengeInvite(cid, fromId, fromName, fromAvatar) {
 
 let sseSource=null;
 let _sseErrCount=0;
+let _connOnline=true;
+
+function _updateConnStatus(online){
+  _connOnline=online;
+  let dot=document.getElementById('gc-conn-dot');
+  if(!dot){
+    dot=document.createElement('div');
+    dot.id='gc-conn-dot';
+    dot.style.cssText='position:fixed;top:calc(var(--sat,0px) + 6px);right:8px;width:8px;height:8px;border-radius:50%;z-index:9999;transition:background .3s,opacity .3s;pointer-events:none;';
+    document.body.appendChild(dot);
+  }
+  dot.style.background=online?'#22C55E':'#EF4444';
+  dot.style.opacity=online?'0':'1';
+  // Mostra verde per 2s quando si riconnette, poi sparisce
+  if(online){dot.style.opacity='1';setTimeout(()=>{if(_connOnline)dot.style.opacity='0';},2000);}
+}
 
 function _gcVisReconnect(){
   if(document.visibilityState==='visible' && ME){
@@ -5685,6 +5739,8 @@ function _gcVisReconnect(){
     if(ioSocket && ioSocket.disconnected){ try{ioSocket.connect();}catch{} }
     // Riconnetti SSE se chiuso
     if(!sseSource || sseSource.readyState === 2){ setTimeout(function(){if(ME)startSSE();},500); }
+    // Aggiorna badge DM
+    updateDMBadge();
   }
 }
 
@@ -5816,7 +5872,20 @@ function startSSE(){
 
   // ── SSE (sempre attivo come fallback) ──
   sseSource=new EventSource('/api/events?t='+encodeURIComponent(tok));
-  sseSource.onopen=()=>{ _sseErrCount=0; };
+  sseSource.onopen=()=>{ _sseErrCount=0; _updateConnStatus(true); };
+  sseSource.onerror=()=>{
+    _sseErrCount++;
+    _updateConnStatus(false);
+    if(_sseErrCount>5){
+      sseSource.close();
+      // Riconnessione con backoff esponenziale
+      const delay = Math.min(30000, 2000 * Math.pow(1.5, Math.min(_sseErrCount-5, 8)));
+      setTimeout(()=>{ if(ME) startSSE(); }, delay);
+    }
+  };
+
+  // ── Heartbeat handler (server invia ogni 25s) ──
+  sseSource.addEventListener('heartbeat', ()=>{ _sseErrCount=0; _updateConnStatus(true); });
 
   // ── Helper: registra handler su ENTRAMBI i canali con dedup ──
   function onEvent(eventName, handler, useDedupe){

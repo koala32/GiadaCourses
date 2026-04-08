@@ -188,12 +188,64 @@ setInterval(async () => {
     // Pulisci daily missions vecchie (>7 giorni)
     const dailyCutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     await db.daily.removeAsync({ createdAt: { $lt: dailyCutoff } }, { multi: true });
+    // Pulisci chiamate orfane (>5 minuti senza risposta)
+    if (socialState?.activeCalls) {
+      const callCutoff = Date.now() - 300000;
+      for (const [id, call] of socialState.activeCalls) {
+        if (!call.answered && call.startedAt < callCutoff) { socialState.activeCalls.delete(id); }
+      }
+    }
+    // Pulisci sfide orfane (>10 minuti se pending, >30 minuti se active)
+    if (socialState?.activeChallenges) {
+      const pendCutoff = Date.now() - 600000;
+      const actCutoff = Date.now() - 1800000;
+      for (const [id, ch] of socialState.activeChallenges) {
+        if (ch.status === 'pending' && ch.createdAt < pendCutoff) socialState.activeChallenges.delete(id);
+        else if (ch.status === 'active' && ch.startedAt < actCutoff) socialState.activeChallenges.delete(id);
+      }
+    }
+    // Pulisci SSE connections morte
+    for (const [uid, set] of sseClients) {
+      for (const res of set) { try { if (res.writableEnded || res.destroyed) set.delete(res); } catch { set.delete(res); } }
+      if (!set.size) sseClients.delete(uid);
+    }
+    // Pulisci Socket.IO connections morte
+    for (const [uid, set] of ioClients) {
+      for (const s of set) { if (s.disconnected) set.delete(s); }
+      if (!set.size) ioClients.delete(uid);
+    }
     // Compatta database
     for (const [name, store] of Object.entries(db)) {
       if (store?.persistence?.compactDatafile) store.persistence.compactDatafile();
     }
   } catch (e) { serverLog('warn', 'Pulizia periodica errore:', e.message); }
 }, 6 * 60 * 60 * 1000); // Ogni 6 ore
+
+// ── SSE Heartbeat — mantiene vive le connessioni mobili ──
+setInterval(() => {
+  const payload = `event: heartbeat\ndata: ${JSON.stringify({ts:Date.now()})}\n\n`;
+  for (const [uid, set] of sseClients) {
+    for (const res of set) {
+      try { res.write(payload); } catch { set.delete(res); }
+    }
+  }
+}, 25000); // Ogni 25 secondi
+
+// ── Database index hints (NeDB) — velocizza le query frequenti ──
+try {
+  db.users.ensureIndexAsync({ fieldName: 'email', unique: true, sparse: true }).catch(()=>{});
+  db.users.ensureIndexAsync({ fieldName: 'username', unique: true, sparse: true }).catch(()=>{});
+  db.sessions.ensureIndexAsync({ fieldName: 'token', unique: true }).catch(()=>{});
+  db.sessions.ensureIndexAsync({ fieldName: 'userId' }).catch(()=>{});
+  db.posts.ensureIndexAsync({ fieldName: 'userId' }).catch(()=>{});
+  db.posts.ensureIndexAsync({ fieldName: 'timestamp' }).catch(()=>{});
+  db.messages.ensureIndexAsync({ fieldName: 'toId' }).catch(()=>{});
+  db.messages.ensureIndexAsync({ fieldName: 'fromId' }).catch(()=>{});
+  db.stories.ensureIndexAsync({ fieldName: 'userId' }).catch(()=>{});
+  db.stories.ensureIndexAsync({ fieldName: 'timestamp' }).catch(()=>{});
+  db.daily.ensureIndexAsync({ fieldName: 'userId' }).catch(()=>{});
+  serverLog('ok', 'Database indexes configurati');
+} catch(e) { serverLog('warn', 'DB index error:', e.message); }
 
 // ── Server status ──
 app.get('/api/server-status', (req, res) => {

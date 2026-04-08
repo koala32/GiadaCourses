@@ -260,6 +260,7 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
+      { version: '11.4', date: '2026-04-09', title: 'Stabilita e Prestazioni', changes: ['Connessione piu stabile con riconnessione automatica','Indicatore di connessione in tempo reale','Pulizia automatica chiamate e sfide abbandonate','L\'app risponde piu velocemente alle ricerche','Pannello Salute del sistema per gli admin','Database ottimizzato per velocita'] },
       { version: '11.3', date: '2026-04-08', title: 'Storie Interattive', changes: ['Riquadro "Chiedimi" nelle storie: i tuoi amici possono risponderti in DM','Trascina il riquadro dove vuoi nella storia','Nuova barra adesivi per personalizzare le storie','Testo, tag, musica, filtri e durata sempre a portata di mano','Risposte alle storie arrivano direttamente nei messaggi'] },
       { version: '11.2', date: '2026-04-08', title: 'Velocita e Sicurezza', changes: ['L\'app si carica molto piu velocemente','Le immagini si caricano solo quando le vedi','Protezione avanzata contro accessi indesiderati','Pulizia automatica dei dati vecchi per mantenere tutto veloce','Migliore protezione della tua privacy e dei tuoi dati'] },
       { version: '11.1', date: '2026-04-08', title: 'Miglioramenti Chiamate', changes: ['Le chiamate audio ora funzionano in modo stabile','Connessione piu affidabile durante le chiamate','Le sfide 1v1 sono piu reattive','Backup automatico giornaliero dei tuoi dati','Migliorata la stabilita generale dell\'app'] },

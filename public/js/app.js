@@ -3426,11 +3426,6 @@ function openStoryCreator(){
   h += '<button onclick="openStoryTagPicker()" class="sc-pill-btn" style="flex:1">Tag</button>';
   h += '<button onclick="toggleStoryQuestionBox()" class="sc-pill-btn" id="sc-qbox-btn" style="flex:1">Chiedimi</button>';
   h += '</div>';
-  h += '<div id="sc-qbox-wrap" style="display:none;margin-bottom:16px">';
-  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Riquadro Domande</div>';
-  h += '<input type="text" id="sc-qbox-text" placeholder="Es: Fammi una domanda..." value="Fammi una domanda" maxlength="100" style="width:100%;border:1.5px solid rgba(255,255,255,.15);border-radius:16px;padding:10px 14px;font-family:var(--fb);font-size:.84rem;outline:none;background:rgba(255,255,255,.08);color:#fff">';
-  h += '<div style="font-size:.68rem;color:rgba(255,255,255,.3);margin-top:4px">Chi vede la tua storia potra rispondere e il messaggio ti arrivera in DM</div>';
-  h += '</div>';
   // Templates (inside panel)
   h += '<div id="sc-templates-wrap" style="display:none;margin-bottom:16px">';
   h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Sfondi</div>';
@@ -3503,7 +3498,7 @@ function _showStoryOptsBtn(){
   if(btn) btn.style.display = 'inline-flex';
 }
 
-function closeStoryCreator(){stopStoryPreview();document.getElementById('story-creator-modal')?.remove();pendingStoryMedia=null;storyTextLayers=[];window._storyBgTemplate=null;_storyPanelOpen=false;}
+function closeStoryCreator(){stopStoryPreview();document.getElementById('story-creator-modal')?.remove();pendingStoryMedia=null;storyTextLayers=[];window._storyBgTemplate=null;_storyPanelOpen=false;_storyQBox=null;}
 
 function showStoryTutorialAgain(){
   const modal = document.getElementById('story-creator-modal');
@@ -3815,13 +3810,46 @@ function handleStoryMedia(input,type){
   }
 }
 
+let _storyQBox = null; // {text, x, y}
+
 function toggleStoryQuestionBox(){
-  const wrap=document.getElementById('sc-qbox-wrap');
+  const preview=document.getElementById('sc-preview');
+  if(!preview)return;
+  // Se gia attivo, rimuovi
+  const existing=preview.querySelector('.sc-qbox-overlay');
+  if(existing){existing.remove();_storyQBox=null;
+    const btn=document.getElementById('sc-qbox-btn');if(btn)btn.style.background='';
+    return;
+  }
+  const text=prompt('Scrivi la domanda per i tuoi followers:','Fammi una domanda');
+  if(!text?.trim())return;
+  _storyQBox={text:text.trim(),x:10,y:55};
   const btn=document.getElementById('sc-qbox-btn');
-  if(!wrap)return;
-  const show=wrap.style.display==='none';
-  wrap.style.display=show?'block':'none';
-  if(btn) btn.style.background=show?'var(--coral)':'';
+  if(btn)btn.style.background='var(--coral)';
+  // Crea overlay draggabile
+  const el=document.createElement('div');
+  el.className='sc-qbox-overlay';
+  el.innerHTML='<div class="sc-qbox-icon">💬</div><div class="sc-qbox-label">'+escHTML(text.trim())+'</div><div class="sc-qbox-hint">Tocca e trascina per spostare</div>';
+  el.style.top='55%';el.style.left='10%';
+  // Drag support
+  let dragging=false,ox=0,oy=0;
+  const startDrag=(cx,cy)=>{dragging=true;const r=el.getBoundingClientRect();ox=cx-r.left;oy=cy-r.top;el.style.transition='none';};
+  const moveDrag=(cx,cy)=>{if(!dragging)return;const pr=preview.getBoundingClientRect();el.style.left=((cx-pr.left-ox)/pr.width*100)+'%';el.style.top=((cy-pr.top-oy)/pr.height*100)+'%';};
+  const endDrag=()=>{if(dragging){dragging=false;el.style.transition='';const pr=preview.getBoundingClientRect();const er=el.getBoundingClientRect();if(_storyQBox){_storyQBox.x=Math.round((er.left-pr.left)/pr.width*1000)/10;_storyQBox.y=Math.round((er.top-pr.top)/pr.height*1000)/10;}}};
+  el.addEventListener('mousedown',e=>{e.preventDefault();startDrag(e.clientX,e.clientY);});
+  document.addEventListener('mousemove',e=>moveDrag(e.clientX,e.clientY));
+  document.addEventListener('mouseup',endDrag);
+  el.addEventListener('touchstart',e=>{e.preventDefault();startDrag(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+  document.addEventListener('touchmove',e=>{if(dragging)moveDrag(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
+  document.addEventListener('touchend',endDrag);
+  // Doppio tap per modificare testo
+  let lastTap=0;
+  el.addEventListener('pointerup',()=>{const now=Date.now();if(now-lastTap<350){const nt=prompt('Modifica domanda:',_storyQBox.text);if(nt?.trim()){_storyQBox.text=nt.trim();el.querySelector('.sc-qbox-label').textContent=nt.trim();}}lastTap=now;});
+  // Swipe giu per eliminare
+  let sy=0;
+  el.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;},{passive:true});
+  el.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-sy>80&&!dragging){el.remove();_storyQBox=null;if(btn)btn.style.background='';}});
+  preview.appendChild(el);
 }
 
 async function publishStory(){
@@ -3842,9 +3870,7 @@ async function publishStory(){
     fd.append('music',storySelectedMusic||'none');
     fd.append('musicTitle',storySelectedMusicTitle||'');
     if(storyTextLayers.length) fd.append('textOverlays',JSON.stringify(storyTextLayers));
-    const qbox=document.getElementById('sc-qbox-text');
-    const qboxWrap=document.getElementById('sc-qbox-wrap');
-    if(qbox&&qboxWrap&&qboxWrap.style.display!=='none'&&qbox.value.trim()) fd.append('questionBox',qbox.value.trim());
+    if(_storyQBox&&_storyQBox.text) fd.append('questionBox',JSON.stringify(_storyQBox));
     const tok=localStorage.getItem('gc_token');
     const d = await uploadWithProgress('/api/stories', fd, {'Authorization':'Bearer '+tok});
     window._storyBgTemplate=null;
@@ -3920,20 +3946,30 @@ function showStory(){
     </div>
     ${story.caption?`<div class="story-caption">${escHTML(story.caption)}</div>`:''}
     ${story.questionBox&&ME&&ME._id!==group.user._id?`
-      <div class="story-qbox" id="sv-qbox">
-        <div class="story-qbox-label">${escHTML(story.questionBox)}</div>
-        <div class="story-qbox-input-row">
-          <input type="text" id="sv-qbox-input" class="story-qbox-input" placeholder="Scrivi la tua risposta..." maxlength="500" onkeydown="if(event.key==='Enter'){event.preventDefault();sendStoryReply('${story._id}');}">
-          <button onclick="sendStoryReply('${story._id}')" class="story-qbox-send">Invia</button>
+      <div class="sv-qbox-positioned" style="top:${story.questionBox.y||55}%;left:${story.questionBox.x||10}%" onclick="openStoryReplyInput('${story._id}','${escAttr(story.questionBox.text||'')}')">
+        <div class="sv-qbox-bubble">
+          <div style="font-size:.75rem;opacity:.6;margin-bottom:3px">💬</div>
+          <div style="font-weight:700;font-size:.88rem">${escHTML(story.questionBox.text||'Fammi una domanda')}</div>
+          <div style="font-size:.68rem;opacity:.5;margin-top:3px">Tocca per rispondere</div>
         </div>
       </div>
     `:''}
     ${story.questionBox&&ME&&ME._id===group.user._id?`
-      <div class="story-qbox story-qbox-own">
-        <div class="story-qbox-label">${escHTML(story.questionBox)}</div>
-        <div style="font-size:.7rem;opacity:.5;margin-top:4px">Le risposte ti arrivano in DM</div>
+      <div class="sv-qbox-positioned sv-qbox-own" style="top:${story.questionBox.y||55}%;left:${story.questionBox.x||10}%">
+        <div class="sv-qbox-bubble">
+          <div style="font-size:.75rem;opacity:.6;margin-bottom:3px">💬</div>
+          <div style="font-weight:700;font-size:.88rem">${escHTML(story.questionBox.text||'')}</div>
+          <div style="font-size:.68rem;opacity:.5;margin-top:3px">Le risposte arrivano in DM</div>
+        </div>
       </div>
     `:''}
+    <div class="sv-reply-bar" id="sv-reply-bar" style="display:none">
+      <div class="sv-reply-label" id="sv-reply-label"></div>
+      <div class="sv-reply-row">
+        <input type="text" id="sv-qbox-input" class="sv-reply-input" placeholder="Scrivi la tua risposta..." maxlength="500" onkeydown="if(event.key==='Enter'){event.preventDefault();sendStoryReply(this.dataset.storyId);}">
+        <button onclick="sendStoryReply(document.getElementById('sv-qbox-input').dataset.storyId)" class="sv-reply-send">Invia</button>
+      </div>
+    </div>
     <button class="story-viewer-close" onclick="closeStory()">✕</button>
     ${story.mediaType==='video'?`<button class="story-mute-btn" id="sv-mute" onclick="svToggleMute()" title="Audio">${svMuted?'🔇':'🔊'}</button>`:''}
     ${ME&&(ME._id===group.user._id||['admin','superadmin'].includes(ME.role))
@@ -3944,11 +3980,11 @@ function showStory(){
 
   document.body.appendChild(viewer);
 
-  // Pausa storia quando si scrive nel riquadro domande
+  // Pausa storia quando si scrive nel riquadro risposte
   const qInput=viewer.querySelector('#sv-qbox-input');
   if(qInput){
-    qInput.addEventListener('focus',()=>{clearTimeout(storyTimer);const bar=document.getElementById('spf-'+currentStoryIdx);if(bar)bar.style.animationPlayState='paused';});
-    qInput.addEventListener('blur',()=>{const dur=(story.duration||15)*1000;const bar=document.getElementById('spf-'+currentStoryIdx);if(bar)bar.style.animationPlayState='running';storyTimer=setTimeout(nextStory,dur);});
+    qInput.addEventListener('focus',()=>{clearTimeout(storyTimer);});
+    qInput.addEventListener('blur',()=>{const bar=document.getElementById('sv-reply-bar');if(bar&&bar.style.display==='none'){const dur=(story.duration||15)*1000;storyTimer=setTimeout(nextStory,dur);}});
   }
 
   // Play story music if present
@@ -4045,15 +4081,29 @@ function nextStory(){
 function prevStory(){ if(currentStoryIdx>0){currentStoryIdx--;showStory();} }
 function closeStory(){ clearTimeout(storyTimer); storyPauseStart=0; stopStoryViewerMusic(); document.getElementById('story-viewer')?.remove(); }
 
+function openStoryReplyInput(storyId, questionText){
+  const bar=document.getElementById('sv-reply-bar');
+  const label=document.getElementById('sv-reply-label');
+  const input=document.getElementById('sv-qbox-input');
+  if(!bar||!input)return;
+  if(label) label.textContent=questionText||'Rispondi';
+  input.dataset.storyId=storyId;
+  bar.style.display='block';
+  // Pausa storia
+  clearTimeout(storyTimer);
+  setTimeout(()=>input.focus(),100);
+}
+
 async function sendStoryReply(storyId){
   const input=document.getElementById('sv-qbox-input');
-  if(!input||!input.value.trim())return;
+  if(!input||!input.value.trim()||!storyId)return;
   const text=input.value.trim();
   input.value='';input.disabled=true;
   try{
     await POST('/api/stories/'+storyId+'/reply',{text});
-    const qbox=document.getElementById('sv-qbox');
-    if(qbox) qbox.innerHTML='<div style="text-align:center;padding:12px;color:#fff;font-size:.85rem;font-weight:600">Risposta inviata!</div>';
+    const bar=document.getElementById('sv-reply-bar');
+    if(bar) bar.innerHTML='<div style="text-align:center;padding:14px;color:#fff;font-size:.88rem;font-weight:700">Risposta inviata! 💬</div>';
+    setTimeout(()=>{if(bar)bar.style.display='none';},2000);
     toast('Risposta inviata in DM!');
   }catch(e){toast(e.message||'Errore','error');input.disabled=false;}
 }

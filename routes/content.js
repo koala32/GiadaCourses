@@ -117,14 +117,23 @@ module.exports = function(app) {
       let textOverlays = [];
       try { textOverlays = JSON.parse(req.body.textOverlays || '[]'); } catch {}
 
-      const story = await db.stories.insertAsync({
+        let questionBox = null;
+        try {
+          const qb = req.body.questionBox;
+          if (qb) {
+            const parsed = typeof qb === 'string' && qb.startsWith('{') ? JSON.parse(qb) : { text: String(qb).slice(0, 100) };
+            if (parsed.text) questionBox = { text: parsed.text.slice(0, 100), x: parseFloat(parsed.x) || 10, y: parseFloat(parsed.y) || 55 };
+          }
+        } catch {}
+
+        const story = await db.stories.insertAsync({
         userId: req.user._id, mediaUrl, mediaType, bgTemplate,
         caption: (req.body.caption || '').trim().slice(0, 200),
         filter: req.body.filter || 'none',
         duration: Math.min(15, Math.max(3, parseInt(req.body.duration) || 15)),
         music: (req.body.music && req.body.music !== 'none') ? req.body.music : null,
         musicTitle: (req.body.music && req.body.music !== 'none') ? (req.body.musicTitle || '') : '',
-        questionBox: (req.body.questionBox || '').trim().slice(0, 100) || null,
+        questionBox,
         textOverlays, timestamp: Date.now(), views: [],
       });
       sseBroadcast('new_story', { storyId: story._id, userId: req.user._id, username: req.user.username, avatar: req.user.avatar });

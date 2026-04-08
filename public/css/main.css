@@ -484,14 +484,25 @@ video.story-media-fullscreen{object-fit:cover;}
 .story-viewer-close{position:absolute;top:calc(14px + var(--sat,0px));right:12px;background:rgba(0,0,0,.4);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:1rem;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;}
 .story-caption{position:absolute;bottom:calc(14px + var(--sab,0px));left:0;right:0;padding:50px 18px 18px;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);color:#fff;font-size:.93rem;font-weight:600;z-index:4;line-height:1.45;}
 .story-mute-btn{position:absolute;bottom:calc(20px + var(--sab,0px));right:14px;background:rgba(0,0,0,.45);border:none;border-radius:50%;width:36px;height:36px;color:#fff;font-size:.95rem;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;}
-.story-qbox{position:absolute;bottom:calc(14px + var(--sab,0px));left:12px;right:12px;z-index:8;background:rgba(0,0,0,.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:18px;padding:14px 16px;border:1px solid rgba(255,255,255,.1);}
-.story-qbox-own{pointer-events:none;}
-.story-qbox-label{color:#fff;font-family:var(--fh);font-size:.92rem;font-weight:700;text-align:center;margin-bottom:10px;}
-.story-qbox-input-row{display:flex;gap:8px;}
-.story-qbox-input{flex:1;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:10px 16px;color:#fff;font-family:var(--fb);font-size:.84rem;outline:none;}
-.story-qbox-input::placeholder{color:rgba(255,255,255,.4);}
-.story-qbox-input:focus{border-color:rgba(139,92,246,.5);background:rgba(255,255,255,.18);}
-.story-qbox-send{background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;border:none;border-radius:24px;padding:10px 18px;font-family:var(--fb);font-weight:700;font-size:.82rem;cursor:pointer;flex-shrink:0;}
+/* Story Question Box — Creator (draggable) */
+.sc-qbox-overlay{position:absolute;z-index:10;cursor:move;touch-action:none;user-select:none;-webkit-user-select:none;padding:4px;}
+.sc-qbox-overlay .sc-qbox-icon{text-align:center;font-size:1.1rem;margin-bottom:2px;}
+.sc-qbox-overlay .sc-qbox-label{background:rgba(255,255,255,.95);color:#1E1B4B;border-radius:16px;padding:12px 18px;font-family:var(--fb);font-size:.88rem;font-weight:700;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.3);min-width:160px;max-width:250px;}
+.sc-qbox-overlay .sc-qbox-hint{text-align:center;font-size:.62rem;color:rgba(255,255,255,.4);margin-top:4px;}
+/* Story Question Box — Viewer (positioned) */
+.sv-qbox-positioned{position:absolute;z-index:6;cursor:pointer;touch-action:none;}
+.sv-qbox-positioned .sv-qbox-bubble{background:rgba(255,255,255,.92);color:#1E1B4B;border-radius:16px;padding:14px 20px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.3);min-width:150px;max-width:240px;transition:transform .15s;}
+.sv-qbox-positioned:active .sv-qbox-bubble{transform:scale(.96);}
+.sv-qbox-own{pointer-events:none;opacity:.7;}
+/* Story Reply Bar (bottom) */
+.sv-reply-bar{position:absolute;bottom:0;left:0;right:0;z-index:9;background:rgba(0,0,0,.75);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);padding:12px 14px calc(12px + var(--sab,0px));border-top:1px solid rgba(255,255,255,.1);animation:slideUp .25s ease;}
+.sv-reply-label{color:rgba(255,255,255,.7);font-size:.78rem;font-weight:600;margin-bottom:8px;text-align:center;}
+.sv-reply-row{display:flex;gap:8px;}
+.sv-reply-input{flex:1;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:24px;padding:11px 16px;color:#fff;font-family:var(--fb);font-size:.86rem;outline:none;}
+.sv-reply-input::placeholder{color:rgba(255,255,255,.35);}
+.sv-reply-input:focus{border-color:rgba(139,92,246,.6);background:rgba(255,255,255,.18);}
+.sv-reply-send{background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;border:none;border-radius:24px;padding:11px 20px;font-family:var(--fb);font-weight:700;font-size:.84rem;cursor:pointer;flex-shrink:0;}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .story-tap-zone{position:absolute;top:0;height:100%;z-index:3;cursor:pointer;-webkit-tap-highlight-color:transparent;}
 .story-tap-left{left:0;width:38%;}
 .story-tap-right{right:0;width:38%;}

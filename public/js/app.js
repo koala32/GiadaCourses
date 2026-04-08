@@ -3393,9 +3393,19 @@ function openStoryCreator(){
   h += '<button class="btn-primary" onclick="publishStory()" style="width:auto;padding:9px 20px;font-size:.82rem;border-radius:20px">Pubblica</button>';
   h += '</div>';
   // Bottom bar with media buttons
-  h += '<div id="sc-bottom-bar" style="position:absolute;bottom:0;left:0;right:0;z-index:6;padding:10px 16px calc(14px + var(--sab,0px));background:linear-gradient(to top,rgba(0,0,0,.7),transparent)">';
+  h += '<div id="sc-bottom-bar" style="position:absolute;bottom:0;left:0;right:0;z-index:6;padding:10px 16px calc(14px + var(--sab,0px));background:linear-gradient(to top,rgba(0,0,0,.85),transparent)">';
   h += '<input type="text" id="story-caption" placeholder="Didascalia..." style="width:100%;border:1.5px solid rgba(255,255,255,.15);border-radius:24px;padding:10px 16px;font-family:var(--fb);font-size:.84rem;outline:none;background:rgba(255,255,255,.08);color:#fff;backdrop-filter:blur(6px);margin-bottom:10px">';
-  h += '<div style="display:flex;gap:8px;align-items:center">';
+  // Sticker tray (appare dopo caricamento media)
+  h += '<div id="sc-sticker-tray" class="sc-sticker-tray" style="display:none">';
+  h += '<button class="sc-sticker-btn" onclick="addStoryText()"><span class="sc-sticker-icon">Aa</span><span class="sc-sticker-lbl">Testo</span></button>';
+  h += '<button class="sc-sticker-btn" onclick="toggleStoryQuestionBox()" id="sc-qbox-btn"><span class="sc-sticker-icon">&#x1F4AC;</span><span class="sc-sticker-lbl">Chiedimi</span></button>';
+  h += '<button class="sc-sticker-btn" onclick="openStoryTagPicker()"><span class="sc-sticker-icon">&#x1F3F7;</span><span class="sc-sticker-lbl">Tag</span></button>';
+  h += '<button class="sc-sticker-btn" onclick="toggleStoryPanel(\'music\')"><span class="sc-sticker-icon">&#x1F3B5;</span><span class="sc-sticker-lbl">Musica</span></button>';
+  h += '<button class="sc-sticker-btn" onclick="toggleStoryPanel(\'filters\')"><span class="sc-sticker-icon">&#x2728;</span><span class="sc-sticker-lbl">Filtri</span></button>';
+  h += '<button class="sc-sticker-btn" onclick="toggleStoryPanel(\'duration\')"><span class="sc-sticker-icon">&#x23F1;</span><span class="sc-sticker-lbl">Durata</span></button>';
+  h += '</div>';
+  // Media buttons
+  h += '<div id="sc-media-btns" style="display:flex;gap:8px;align-items:center">';
   h += '<label class="sc-pill-btn" for="sc-img-input">Foto</label>';
   h += '<input type="file" id="sc-img-input" accept="image/*" style="display:none" onchange="handleStoryMedia(this,\'image\')">';
   h += '<label class="sc-pill-btn" for="sc-vid-input">Video</label>';
@@ -3403,28 +3413,26 @@ function openStoryCreator(){
   h += '<button class="sc-pill-btn" onclick="openStoryTemplates()">Sfondo</button>';
   h += '<label class="sc-pill-btn" for="sc-cam-input">Scatta</label>';
   h += '<input type="file" id="sc-cam-input" accept="image/*" capture="environment" style="display:none" onchange="handleStoryMedia(this,\'image\')">';
-  h += '<div style="flex:1"></div>';
-  h += '<button id="sc-opts-btn" class="sc-pill-btn sc-accent" onclick="toggleStoryOptions()" style="display:none">Opzioni</button>';
   h += '</div></div>';
-  // Swipe-up options panel
+  // Slide-up mini panels (one at a time)
   h += '<div id="sc-options-panel" class="sc-options-panel">';
-  h += '<div style="width:40px;height:4px;background:rgba(255,255,255,.2);border-radius:4px;margin:12px auto 16px;cursor:pointer" onclick="toggleStoryOptions()"></div>';
+  h += '<div style="width:40px;height:4px;background:rgba(255,255,255,.2);border-radius:4px;margin:12px auto 16px;cursor:pointer" onclick="closeStoryPanel()"></div>';
   // Duration
-  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Durata</div>';
-  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;background:rgba(255,255,255,.05);border-radius:14px;padding:10px 14px">';
+  h += '<div id="sc-panel-duration" class="sc-panel-section" style="display:none">';
+  h += '<div style="font-weight:700;font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Durata</div>';
+  h += '<div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border-radius:14px;padding:12px 14px">';
   h += '<input type="range" id="sc-duration" min="3" max="15" value="15" style="flex:1;accent-color:var(--coral)">';
-  h += '<span id="sc-duration-lbl" style="color:#fff;font-weight:800;font-size:.9rem;min-width:30px;text-align:center">15s</span></div>';
+  h += '<span id="sc-duration-lbl" style="color:#fff;font-weight:800;font-size:1rem;min-width:30px;text-align:center">15s</span></div>';
+  h += '</div>';
   // Filters
-  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Filtri</div>';
-  h += '<div id="sc-filters" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none;margin-bottom:16px"></div>';
+  h += '<div id="sc-panel-filters" class="sc-panel-section" style="display:none">';
+  h += '<div style="font-weight:700;font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Filtri</div>';
+  h += '<div id="sc-filters" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none"></div>';
+  h += '</div>';
   // Music
-  h += '<div style="font-weight:700;font-size:.72rem;color:rgba(255,255,255,.4);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Musica</div>';
-  h += '<div id="sc-music" style="margin-bottom:16px"></div>';
-  // Text + Tags
-  h += '<div style="display:flex;gap:8px;margin-bottom:16px">';
-  h += '<button onclick="addStoryText()" class="sc-pill-btn" style="flex:1">Testo</button>';
-  h += '<button onclick="openStoryTagPicker()" class="sc-pill-btn" style="flex:1">Tag</button>';
-  h += '<button onclick="toggleStoryQuestionBox()" class="sc-pill-btn" id="sc-qbox-btn" style="flex:1">Chiedimi</button>';
+  h += '<div id="sc-panel-music" class="sc-panel-section" style="display:none">';
+  h += '<div style="font-weight:700;font-size:.78rem;color:rgba(255,255,255,.5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Musica</div>';
+  h += '<div id="sc-music"></div>';
   h += '</div>';
   // Templates (inside panel)
   h += '<div id="sc-templates-wrap" style="display:none;margin-bottom:16px">';
@@ -3437,9 +3445,8 @@ function openStoryCreator(){
     h += '<div id="story-tutorial" style="position:absolute;inset:0;z-index:20;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center">';
     h += '<div style="font-family:var(--fh);font-size:1.4rem;color:#fff;margin-bottom:12px">Crea la tua Storia</div>';
     h += '<div style="font-size:.85rem;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:24px;max-width:300px">';
-    h += 'Carica una foto o video, poi tocca <strong style="color:var(--coral)">Opzioni</strong> per aggiungere durata, filtri, musica e testo.</div>';
-    h += '<div style="font-size:2rem;margin-bottom:8px;animation:float 2s ease-in-out infinite;color:rgba(255,255,255,.6)">&#x2191;</div>';
-    h += '<div style="font-size:.78rem;color:rgba(255,255,255,.4);margin-bottom:24px">Swipe up per le opzioni</div>';
+    h += 'Carica una foto o video, poi usa gli <strong style="color:var(--coral)">adesivi</strong> per aggiungere testo, domande, tag, musica e filtri.</div>';
+    h += '<div style="font-size:.78rem;color:rgba(255,255,255,.4);margin-bottom:24px">Trascina gli elementi per posizionarli</div>';
     h += '<button onclick="document.getElementById(\'story-tutorial\').remove();localStorage.setItem(\'gc_story_tut_v3\',\'1\')" style="background:linear-gradient(135deg,var(--coral),var(--orange));color:#fff;border:none;border-radius:16px;padding:14px 32px;font-family:var(--fb);font-weight:800;font-size:.95rem;cursor:pointer;width:100%;max-width:280px">Ho capito!</button>';
     h += '</div>';
   }
@@ -3462,11 +3469,25 @@ function openStoryCreator(){
 }
 
 var _storyPanelOpen = false;
-function toggleStoryOptions(){
-  _storyPanelOpen = !_storyPanelOpen;
+function toggleStoryPanel(section){
   var panel = document.getElementById('sc-options-panel');
-  if(panel) panel.style.transform = _storyPanelOpen ? 'translateY(0)' : 'translateY(100%)';
+  if(!panel) return;
+  // Hide all sections
+  panel.querySelectorAll('.sc-panel-section').forEach(s => s.style.display='none');
+  var target = document.getElementById('sc-panel-'+section);
+  if(target){
+    target.style.display='block';
+    _storyPanelOpen = true;
+    panel.style.transform = 'translateY(0)';
+  }
 }
+function closeStoryPanel(){
+  _storyPanelOpen = false;
+  var panel = document.getElementById('sc-options-panel');
+  if(panel) panel.style.transform = 'translateY(100%)';
+}
+// Legacy compatibility
+function toggleStoryOptions(){ if(_storyPanelOpen) closeStoryPanel(); else toggleStoryPanel('duration'); }
 
 function _initStoryPanelSwipe(modal){
   var panel = modal.querySelector('#sc-options-panel');
@@ -3492,10 +3513,10 @@ function _initStoryPanelSwipe(modal){
   }
 }
 
-// Show options button when media is loaded
+// Show sticker tray when media is loaded
 function _showStoryOptsBtn(){
-  var btn = document.getElementById('sc-opts-btn');
-  if(btn) btn.style.display = 'inline-flex';
+  var tray = document.getElementById('sc-sticker-tray');
+  if(tray) tray.style.display = 'flex';
 }
 
 function closeStoryCreator(){stopStoryPreview();document.getElementById('story-creator-modal')?.remove();pendingStoryMedia=null;storyTextLayers=[];window._storyBgTemplate=null;_storyPanelOpen=false;_storyQBox=null;}

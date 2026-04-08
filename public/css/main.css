@@ -460,7 +460,14 @@ input[type=range]{accent-color:var(--coral);}
 .sc-pill-btn{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.15);border-radius:24px;padding:8px 16px;color:#fff;font-family:var(--fb);font-weight:700;font-size:.8rem;cursor:pointer;transition:all .2s;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(4px);white-space:nowrap;}
 .sc-pill-btn:active{transform:scale(.95);background:rgba(255,255,255,.2);}
 .sc-pill-btn.sc-accent{background:linear-gradient(135deg,var(--coral),var(--orange));border-color:transparent;box-shadow:0 4px 12px rgba(255,107,107,.3);}
-.sc-options-panel{position:absolute;bottom:0;left:0;right:0;z-index:10;background:rgba(10,10,26,.97);backdrop-filter:blur(16px);border-radius:24px 24px 0 0;transform:translateY(100%);transition:transform .35s cubic-bezier(.34,1.2,.64,1);padding:0 16px calc(20px + var(--sab,0px));max-height:65vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.sc-options-panel{position:absolute;bottom:0;left:0;right:0;z-index:10;background:rgba(10,10,26,.97);backdrop-filter:blur(16px);border-radius:24px 24px 0 0;transform:translateY(100%);transition:transform .35s cubic-bezier(.34,1.2,.64,1);padding:0 16px calc(20px + var(--sab,0px));max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+/* Sticker Tray */
+.sc-sticker-tray{display:flex;gap:4px;overflow-x:auto;padding:8px 0 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+.sc-sticker-tray::-webkit-scrollbar{display:none;}
+.sc-sticker-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.12);border-radius:14px;padding:8px 12px;cursor:pointer;color:#fff;min-width:56px;flex-shrink:0;transition:all .15s;-webkit-tap-highlight-color:transparent;}
+.sc-sticker-btn:active{transform:scale(.92);background:rgba(139,92,246,.25);border-color:rgba(139,92,246,.4);}
+.sc-sticker-icon{font-size:1.15rem;line-height:1.2;}
+.sc-sticker-lbl{font-size:.6rem;font-weight:700;font-family:var(--fb);opacity:.7;white-space:nowrap;}
 /* Story viewer */
 /* Story Viewer - full redesign */
 /* Previeni selezione testo nei viewer */

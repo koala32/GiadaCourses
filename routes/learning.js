@@ -46,6 +46,8 @@ const WORD_SCRAMBLE = {
   B2: [{w:'ACHIEVEMENT',h:'Something accomplished',it:'Risultato'},{w:'ENVIRONMENT',h:'Nature around us',it:'Ambiente'},{w:'OPPORTUNITY',h:'A chance',it:'Opportunita'},{w:'RESPONSIBLE',h:'In charge of',it:'Responsabile'},{w:'COMFORTABLE',h:'Feeling at ease',it:'Comodo'},{w:'INDEPENDENT',h:'Not needing help',it:'Indipendente'},{w:'COMMUNICATE',h:'Share information',it:'Comunicare'},{w:'TEMPERATURE',h:'How hot or cold',it:'Temperatura'}],
 };
 
+const HANGMAN_WORDS = WORD_SCRAMBLE; // Same word pool, different game mechanic
+
 const SPEED_MATCH = {
   A1: [{en:'Dog',it:'Cane'},{en:'Cat',it:'Gatto'},{en:'House',it:'Casa'},{en:'Book',it:'Libro'},{en:'Car',it:'Macchina'},{en:'Sun',it:'Sole'},{en:'Moon',it:'Luna'},{en:'Tree',it:'Albero'},{en:'Food',it:'Cibo'},{en:'Hand',it:'Mano'},{en:'Eye',it:'Occhio'},{en:'Door',it:'Porta'}],
   A2: [{en:'Knowledge',it:'Conoscenza'},{en:'Freedom',it:'Liberta'},{en:'Dream',it:'Sogno'},{en:'Strength',it:'Forza'},{en:'Journey',it:'Viaggio'},{en:'Island',it:'Isola'},{en:'Bridge',it:'Ponte'},{en:'Cloud',it:'Nuvola'},{en:'Forest',it:'Foresta'},{en:'Storm',it:'Tempesta'},{en:'River',it:'Fiume'},{en:'Mountain',it:'Montagna'}],
@@ -239,6 +241,40 @@ module.exports = function(app, sharedState) {
     if (xpEarned > 0) await db.users.updateAsync({ _id: req.user._id }, { $inc: { xp: xpEarned } });
     _gameState.delete('lq_' + req.body.gameId);
     res.json({ score, total: game.answers.length, results, xpEarned });
+  });
+
+  // ── HANGMAN GAME ──
+  app.get('/api/games/hangman', (req, res) => {
+    const level = req.query.level || 'A1';
+    const pool = HANGMAN_WORDS[level] || HANGMAN_WORDS['A1'];
+    const word = pool[Math.floor(Math.random() * pool.length)];
+    const gameId = crypto.randomBytes(6).toString('hex');
+    _gameState.set('hm_' + gameId, { word: word.w.toUpperCase(), hint: word.h, it: word.it, createdAt: Date.now() });
+    setTimeout(() => _gameState.delete('hm_' + gameId), 600000);
+    res.json({ gameId, hint: word.h, translation: word.it, length: word.w.length, level });
+  });
+
+  app.post('/api/games/hangman/guess', requireAuth, async (req, res) => {
+    const game = _gameState.get('hm_' + req.body.gameId);
+    if (!game) return res.status(404).json({ error: 'Partita scaduta' });
+    const letter = (req.body.letter || '').toUpperCase();
+    if (!letter || letter.length !== 1) return res.status(400).json({ error: 'Lettera non valida' });
+    const found = game.word.includes(letter);
+    if (!game.guessed) game.guessed = [];
+    if (!game.guessed.includes(letter)) game.guessed.push(letter);
+    const wrong = game.guessed.filter(l => !game.word.includes(l));
+    const revealed = game.word.split('').map(l => game.guessed.includes(l) ? l : '_').join('');
+    const won = !revealed.includes('_');
+    const lost = wrong.length >= 6;
+    let xpEarned = 0;
+    if (won) {
+      xpEarned = 20;
+      await db.users.updateAsync({ _id: req.user._id }, { $inc: { xp: xpEarned } });
+      _gameState.delete('hm_' + req.body.gameId);
+    } else if (lost) {
+      _gameState.delete('hm_' + req.body.gameId);
+    }
+    res.json({ found, revealed, wrong, wrongCount: wrong.length, won, lost, xpEarned, word: lost ? game.word : undefined });
   });
 
   // ============================================================
@@ -682,6 +718,16 @@ module.exports = function(app, sharedState) {
         { q: 'Please ___ the light.', opts: ['turn on','turn up','turn in','turn at'], correct: 0 },
         { q: '"Look up" a word means:', opts: ['Guardare su','Cercare','Guardare giu','Alzarsi'], correct: 1 },
       ]},
+      { id: 'b1-04', title: 'Comparatives & Superlatives', desc: 'Bigger, the biggest, more interesting', xp: 30, content: 'Short adjectives: add -er/-est (big→bigger→biggest). Long adjectives: more/most (interesting→more interesting→most interesting). Irregular: good→better→best, bad→worse→worst.', quiz: [
+        { q: 'She is ___ than her sister.', opts: ['tall','taller','tallest','more tall'], correct: 1 },
+        { q: 'This is the ___ movie I have ever seen.', opts: ['good','better','best','most good'], correct: 2 },
+        { q: 'English is ___ than maths for me.', opts: ['more easy','easier','easiest','most easy'], correct: 1 },
+      ]},
+      { id: 'b1-05', title: 'Modal Verbs', desc: 'Should, must, might, could', xp: 30, content: 'Should = dovresti (advice). Must = devi (obligation). Might = potrebbe (possibility). Could = potrei (ability/possibility). "You should study. You must wear a seatbelt. It might rain."', quiz: [
+        { q: 'You ___ see a doctor. (advice)', opts: ['must','should','might','will'], correct: 1 },
+        { q: 'It ___ rain tomorrow. (possibility)', opts: ['should','must','might','will'], correct: 2 },
+        { q: 'You ___ not park here. (prohibition)', opts: ['should','might','must','could'], correct: 2 },
+      ]},
     ],
     B2: [
       { id: 'b2-01', title: 'Reported Speech', desc: 'She said that she was tired', xp: 35, content: 'Direct: "I am tired." Reported: She said (that) she was tired. Tense shifts: am→was, will→would, can→could, have→had.', quiz: [
@@ -694,6 +740,21 @@ module.exports = function(app, sharedState) {
         { q: 'English ___ in many countries.', opts: ['speaks','is spoken','is speaking','spoke'], correct: 1 },
         { q: 'The homework ___ already ___.', opts: ['has/done','has/been done','is/doing','was/do'], correct: 1 },
       ]},
+      { id: 'b2-03', title: 'Relative Clauses', desc: 'Who, which, that, where, whose', xp: 35, content: 'WHO for people: "The man who called you." WHICH for things: "The book which I read." THAT for both: "The car that I bought." WHERE for places: "The city where I live." WHOSE for possession: "The girl whose bag was stolen."', quiz: [
+        { q: 'The woman ___ lives next door is a doctor.', opts: ['which','who','where','whose'], correct: 1 },
+        { q: 'This is the restaurant ___ we had dinner.', opts: ['who','which','where','whose'], correct: 2 },
+        { q: 'The boy ___ father is a pilot speaks 3 languages.', opts: ['who','which','that','whose'], correct: 3 },
+      ]},
+      { id: 'b2-04', title: 'Wish & If Only', desc: 'Expressing regrets and desires', xp: 35, content: 'I wish + past simple = present desire. "I wish I had a car." I wish + past perfect = past regret. "I wish I had studied more." If only works the same way with stronger emotion.', quiz: [
+        { q: 'I wish I ___ taller. (I am short)', opts: ['am','was','were','would be'], correct: 2 },
+        { q: 'She wishes she ___ to the party yesterday.', opts: ['goes','went','had gone','would go'], correct: 2 },
+        { q: 'If only I ___ the answer!', opts: ['know','knew','had known','will know'], correct: 1 },
+      ]},
+      { id: 'b2-05', title: 'Linking Words', desc: 'However, although, despite, whereas', xp: 35, content: 'HOWEVER = tuttavia (contrasto). ALTHOUGH/EVEN THOUGH + clause = sebbene. DESPITE/IN SPITE OF + noun = nonostante. WHEREAS = mentre (contrasto). THEREFORE = quindi (risultato).', quiz: [
+        { q: '___ it was raining, we went for a walk.', opts: ['Despite','Although','However','Therefore'], correct: 1 },
+        { q: 'He is rich. ___, he is not happy.', opts: ['Although','Despite','However','Because'], correct: 2 },
+        { q: '___ the bad weather, we enjoyed the trip.', opts: ['Although','However','Despite','Whereas'], correct: 2 },
+      ]},
     ],
     C1: [
       { id: 'c1-01', title: 'Advanced Conditionals', desc: 'Mixed conditionals and wishes', xp: 40, content: 'Mixed: "If I had studied harder, I would be a doctor now." Wishes: "I wish I had more time." "If only I could fly."', quiz: [
@@ -701,12 +762,42 @@ module.exports = function(app, sharedState) {
         { q: 'I wish I ___ speak French.', opts: ['can','could','will','would'], correct: 1 },
         { q: 'If she ___ harder, she would have passed.', opts: ['studied','had studied','studies','would study'], correct: 1 },
       ]},
+      { id: 'c1-02', title: 'Inversion for Emphasis', desc: 'Never have I, rarely does she', xp: 40, content: 'Inversion after negative adverbs: "Never have I seen such beauty." "Rarely does she complain." "Not only did he pass, but he got top marks." "Hardly had I arrived when it started raining."', quiz: [
+        { q: 'Never ___ I seen such a beautiful sunset.', opts: ['did','have','was','had'], correct: 1 },
+        { q: 'Not only ___ he smart, but also kind.', opts: ['is','does','was','did'], correct: 0 },
+        { q: 'Hardly ___ we arrived when it started to rain.', opts: ['have','did','had','were'], correct: 2 },
+      ]},
+      { id: 'c1-03', title: 'Collocations', desc: 'Make a decision, do homework', xp: 40, content: 'MAKE: a decision, a mistake, progress, money, an effort, a suggestion. DO: homework, research, business, your best, a favour, the dishes. HAVE: a look, a rest, fun, a meeting, a chat.', quiz: [
+        { q: 'She needs to ___ a decision soon.', opts: ['do','make','take','get'], correct: 1 },
+        { q: 'Can you ___ me a favour?', opts: ['make','have','do','give'], correct: 2 },
+        { q: 'Let me ___ a look at your work.', opts: ['do','make','have','take'], correct: 2 },
+      ]},
+      { id: 'c1-04', title: 'Discourse Markers', desc: 'As a matter of fact, on the whole', xp: 40, content: '"As a matter of fact" = in realta. "On the whole" = nel complesso. "To be honest" = ad essere onesti. "As far as I am concerned" = per quanto mi riguarda. "Having said that" = detto questo.', quiz: [
+        { q: '"On the whole" means:', opts: ['In parte','Nel complesso','In realta','Comunque'], correct: 1 },
+        { q: '"As a matter of fact" is similar to:', opts: ['Maybe','Actually','However','Although'], correct: 1 },
+        { q: '"Having said that" introduces:', opts: ['Agreement','A contrast','A question','A conclusion'], correct: 1 },
+      ]},
     ],
     C2: [
       { id: 'c2-01', title: 'Nuances & Idioms', desc: 'Break a leg, piece of cake', xp: 45, content: '"Break a leg" = good luck. "Piece of cake" = very easy. "Hit the nail on the head" = exactly right. "Under the weather" = feeling sick.', quiz: [
         { q: '"Piece of cake" means:', opts: ['A dessert','Very easy','Very hard','A recipe'], correct: 1 },
         { q: '"Under the weather" means:', opts: ['Outside','Cold','Feeling sick','Raining'], correct: 2 },
         { q: '"Break a leg" is said to wish someone:', opts: ['Bad luck','Good luck','A broken leg','To run'], correct: 1 },
+      ]},
+      { id: 'c2-02', title: 'Formal vs Informal Register', desc: 'Appropriate language for context', xp: 45, content: 'Formal: "I would be grateful if you could..." Informal: "Can you...?" Formal: "Furthermore" / Informal: "Also". Formal: "I regret to inform you" / Informal: "Sorry but". Use formal for emails, reports, interviews.', quiz: [
+        { q: 'Which is MORE formal?', opts: ['Can you help?','Could you help?','Would you be so kind as to help?','Help me'], correct: 2 },
+        { q: 'Formal equivalent of "Also":', opts: ['Plus','Furthermore','And','Too'], correct: 1 },
+        { q: '"I regret to inform you" is used in:', opts: ['Text messages','Formal letters','Casual chat','Social media'], correct: 1 },
+      ]},
+      { id: 'c2-03', title: 'Advanced Phrasal Verbs', desc: 'Come across, put up with, get away with', xp: 45, content: '"Come across" = imbattersi in. "Put up with" = tollerare. "Get away with" = farla franca. "Bring up" = tirare su (figli) o menzionare. "Look into" = investigare. "Run out of" = finire, esaurire.', quiz: [
+        { q: '"Put up with" means:', opts: ['Alzare','Tollerare','Costruire','Salire'], correct: 1 },
+        { q: 'We need to ___ this matter immediately.', opts: ['look into','look up','look out','look after'], correct: 0 },
+        { q: 'She was ___ by her grandparents.', opts: ['put up','brought up','come across','run out'], correct: 1 },
+      ]},
+      { id: 'c2-04', title: 'Cleft Sentences', desc: 'It was John who, What I need is', xp: 45, content: 'Cleft sentences add emphasis. "It was JOHN who broke the window." (not someone else) "What I NEED is a holiday." "The reason WHY I called is..." "It is NOT money that makes you happy."', quiz: [
+        { q: 'It ___ Maria who won the prize.', opts: ['is','was','were','has'], correct: 1 },
+        { q: 'What I really ___ is some peace and quiet.', opts: ['want','wants','wanted','wanting'], correct: 0 },
+        { q: 'Cleft sentences are used to:', opts: ['Ask questions','Add emphasis','Express doubt','Show agreement'], correct: 1 },
       ]},
     ],
   };

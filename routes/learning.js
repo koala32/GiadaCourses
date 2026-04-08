@@ -260,6 +260,7 @@ module.exports = function(app, sharedState) {
 
   app.get('/api/changelog', (req, res) => {
     res.json([
+      { version: '11.1', date: '2026-04-08', title: 'Infrastruttura e Stabilita', changes: ['Fix chiamate audio: eliminata doppia consegna ICE','Deploy preserva credenziali (.env) automaticamente','Server relay ottimizzato per bassa latenza','Coturn TURN server configurato per chiamate tra reti diverse','SMTP e Push Notifications configurati','Rimosso gioco Hangman','SSL certificato fixato'] },
       { version: '11.0', date: '2026-04-07', title: 'Restyle & Nuove Feature', changes: ['Restyle completo interfaccia moderna','Lezioni strutturate A1-C2 con quiz','25 missioni giornaliere sempre diverse','Language Partner per trovare compagni di studio','Scheda Supporto con donazioni Ko-fi','Medaglie Supporter e sistema ticket','Onboarding guidato per nuovi utenti','Password dimenticata con reset via email','Caricamenti media ottimizzati','Notifiche push per Android APK'] },
       { version: '10.9', date: '2026-04-06', title: 'App Android e Sicurezza', changes: ['App Android nativa APK disponibile','Chiamate e sfide esclusive per app Android','Rilevamento offline automatico','Foto storie ridimensionamento migliorato','Protezione avanzata contro bot'] },
       { version: '10.8', date: '2026-04-06', title: 'Sicurezza e Dirette', changes: ['Protezione avanzata contro bot e scanner','Dirette LIVE migliorate per host e spettatori','Layout corretto su tutte le pagine','Chiamate e sfide in tempo reale potenziate','Storie con foto ridimensionabili'] },

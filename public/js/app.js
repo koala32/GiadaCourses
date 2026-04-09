@@ -513,13 +513,14 @@ async function renderHome(){
       <small style="opacity:.85">${pct}% verso ${nextLvl}</small>
     </div>
     <div class="stats-row">
-      <div class="stat-card c1"><div class="stat-val">${done}</div><div class="stat-lbl">Esercizi</div></div>
-      <div class="stat-card c2"><div class="stat-val">${ME.streak||0}</div><div class="stat-lbl">Streak</div></div>
+      <div class="stat-card c1" onclick="showPage('exercises')" style="cursor:pointer"><div class="stat-val">${done}</div><div class="stat-lbl">Esercizi</div></div>
+      <div class="stat-card c2" onclick="showPage('leaderboard')" style="cursor:pointer"><div class="stat-val">${ME.streak||0}</div><div class="stat-lbl">Streak 🔥</div></div>
       <div class="stat-card c3" onclick="showFollowList(ME._id,'followers')" style="cursor:pointer"><div class="stat-val">${(ME.followers||[]).length}</div><div class="stat-lbl">Follower</div></div>
     </div>
     <div id="daily-rewards-card"></div>
     <div class="flex-row mb16">
       <button class="btn-primary btn-sm" onclick="showPage('exercises')" style="flex:1">Studia</button>
+      <button class="btn-primary btn-sm" onclick="showPage('leaderboard')" style="flex:1;background:linear-gradient(135deg,#FFD700,#FFA500)">🏆 Classifica</button>
       <button class="btn-primary btn-sm" onclick="showPage('social')" style="flex:1;background:linear-gradient(135deg,var(--teal),var(--blue))">Social</button>
     </div>
     <div class="section-title">🌊 Ultime attività</div>
@@ -2816,17 +2817,16 @@ let lbFilter='total';
 async function renderLeaderboard(){
   const c=document.getElementById('lb-content');
   c.innerHTML=`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div class="section-title" style="margin:0">🏆 Classifica</div>
-      <button onclick="loadLeaderboard()" style="background:var(--grad);color:#fff;border:none;border-radius:20px;padding:6px 14px;font-family:var(--fb);font-weight:700;font-size:.78rem;cursor:pointer">Aggiorna</button>
+    <div class="lb-hero">
+      <div class="lb-hero-icon">🏆</div>
+      <div class="lb-hero-title">Classifica</div>
+      <div class="lb-hero-sub">Completa esercizi e mantieni lo streak per salire!</div>
     </div>
     <div class="lb-filters">
-      <button class="lb-filter-btn${lbFilter==='total'?' active':''}" onclick="lbFilter='total';renderLeaderboard()">Totale</button>
-      <button class="lb-filter-btn${lbFilter==='week'?' active':''}" onclick="lbFilter='week';renderLeaderboard()">Settimana</button>
-      <button class="lb-filter-btn${lbFilter==='streak'?' active':''}" onclick="lbFilter='streak';renderLeaderboard()">Streak</button>
-      <button class="lb-filter-btn${lbFilter==='A1'?' active':''}" onclick="lbFilter='A1';renderLeaderboard()">A1</button>
-      <button class="lb-filter-btn${lbFilter==='A2'?' active':''}" onclick="lbFilter='A2';renderLeaderboard()">A2</button>
-      <button class="lb-filter-btn${lbFilter==='B1'?' active':''}" onclick="lbFilter='B1';renderLeaderboard()">B1+</button>
+      <button class="lb-filter-btn${lbFilter==='total'?' active':''}" onclick="lbFilter='total';renderLeaderboard()">🏅 XP Totale</button>
+      <button class="lb-filter-btn${lbFilter==='week'?' active':''}" onclick="lbFilter='week';renderLeaderboard()">📅 Settimana</button>
+      <button class="lb-filter-btn${lbFilter==='streak'?' active':''}" onclick="lbFilter='streak';renderLeaderboard()">🔥 Streak</button>
+      <button class="lb-filter-btn${lbFilter==='exercises'?' active':''}" onclick="lbFilter='exercises';renderLeaderboard()">📚 Esercizi</button>
     </div>
     <div id="lb-list"><div class="spinner"></div></div>`;
   await loadLeaderboard();
@@ -2837,63 +2837,82 @@ async function loadLeaderboard(){
   if(!lb)return;
   try{
     let users=await GET('/api/leaderboard');
-    // Apply filter
-    if(lbFilter==='streak') users=users.slice().sort((a,b)=>(b.streak||0)-(a.streak||0));
-    else if(lbFilter==='week') users=users.slice().sort((a,b)=>{
-      const aW=Object.values(a.progress||{}).filter(p=>p.completedAt>Date.now()-604800000).length;
-      const bW=Object.values(b.progress||{}).filter(p=>p.completedAt>Date.now()-604800000).length;
-      return bW-aW;
-    });
-    else if(['A1','A2','B1','B2','C1','C2'].includes(lbFilter)){
-      const lvlOrder=['A1','A2','B1','B2','C1','C2'];
-      const minIdx=lvlOrder.indexOf(lbFilter);
-      users=users.filter(u=>lvlOrder.indexOf(u.level||'A1')>=minIdx);
+    let scoreKey='xp', scoreLabel='XP', scoreIcon='⚡';
+
+    if(lbFilter==='streak'){
+      users=users.slice().sort((a,b)=>(b.streak||0)-(a.streak||0));
+      scoreKey='streak'; scoreLabel='giorni'; scoreIcon='🔥';
+    } else if(lbFilter==='week'){
+      users=users.map(u=>({...u,weekXP:Object.values(u.progress||{}).filter(p=>p.completedAt>Date.now()-604800000).reduce((s,p)=>s+(p.score||10),0)}));
+      users.sort((a,b)=>(b.weekXP||0)-(a.weekXP||0));
+      scoreKey='weekXP'; scoreLabel='XP sett.'; scoreIcon='📅';
+    } else if(lbFilter==='exercises'){
+      users=users.map(u=>({...u,exCount:Object.keys(u.progress||{}).length}));
+      users.sort((a,b)=>(b.exCount||0)-(a.exCount||0));
+      scoreKey='exCount'; scoreLabel='completati'; scoreIcon='📚';
     }
-    if(!users.length){lb.innerHTML=`<div class="empty-state"><div class="ei">🏆</div><h3>Nessun risultato</h3><p>Completa esercizi per entrare in classifica!</p></div>`;return;}
-    // Build podium for top 3
+
+    if(!users.length){lb.innerHTML='<div class="empty-state"><div class="ei">🏆</div><h3>Nessun risultato</h3><p>Completa esercizi per entrare in classifica!</p></div>';return;}
+
+    // Posizione dell'utente corrente
+    const myIdx=ME?users.findIndex(u=>u._id===ME._id):-1;
+    const myPos=myIdx>=0?myIdx+1:null;
+
+    // Mini card posizione personale
+    const myCardHTML=ME&&myPos?`
+      <div class="lb-my-pos">
+        <div class="lb-my-rank">#${myPos}</div>
+        <div class="lb-my-info">
+          <div style="font-weight:700;font-size:.88rem">${escHTML(ME.username)}</div>
+          <div style="font-size:.75rem;color:var(--muted)">${ME.level||'A1'} · ${scoreIcon} ${users[myIdx][scoreKey]||0} ${scoreLabel}</div>
+        </div>
+        ${myPos>3?'<div style="font-size:.72rem;color:var(--muted)">'+((users[myIdx-1]?((users[myIdx-1][scoreKey]||0)-(users[myIdx][scoreKey]||0)):0))+' ${scoreLabel} dal #'+(myPos-1)+'</div>':''}
+      </div>
+    `:'';
+
+    // Podio top 3
     const top3=users.slice(0,3);
-    const rest=users.slice(3);
-    const podiumOrder=[top3[1],top3[0],top3[2]].filter(Boolean); // 2nd,1st,3rd visually
-    const podiumClasses=['p2','p1','p3'];
-    const podiumMedals=['🥈','🥇','🥉'];
-    const podiumHeights=['','',''];
+    const podiumOrder=[top3[1],top3[0],top3[2]].filter(Boolean);
+    const podiumMeta=[{cls:'p2',medal:'🥈',pos:'2°'},{cls:'p1',medal:'🥇',pos:'1°'},{cls:'p3',medal:'🥉',pos:'3°'}];
+
     const podiumHTML=top3.length>=1?`
       <div class="lb-podium">
         ${podiumOrder.map((u,pi)=>{
-          const realRank=users.indexOf(u);
-          const cls=podiumClasses[pi];
-          const medal=podiumMedals[pi];
-          const scoreVal=lbFilter==='streak'?(u.streak||0):(u.xp||0);
-          const scoreLabel=lbFilter==='streak'?'giorni':'XP';
-          const avatarContent=u.avatarUrl?`<img src="${u.avatarUrl}" style="width:100%;height:100%;object-fit:cover">`:(u.avatar||initials(u.username));
-          return `<div class="podium-slot ${cls}" onclick="viewUser('${u._id}')">
-            <div class="podium-medal">${medal}</div>
-            <div class="podium-avatar" style="background:${pickColor(u.username)}">${avatarContent}</div>
-            <div class="podium-name">${escHTML(u.username)}${ME&&ME._id===u._id?' (Tu)':''}</div>
-            <div class="podium-xp">${scoreVal}<small style="font-size:.65rem"> ${scoreLabel}</small></div>
-            <div class="podium-base">${cls==='p1'?'1°':cls==='p2'?'2°':'3°'}</div>
+          const meta=podiumMeta[pi];
+          const score=u[scoreKey]||0;
+          const av=u.avatarUrl?`<img src="${u.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:(u.avatar||initials(u.username));
+          return `<div class="podium-slot ${meta.cls}" onclick="viewUser('${u._id}')">
+            <div class="podium-medal">${meta.medal}</div>
+            <div class="podium-avatar" style="background:${pickColor(u.username)}">${av}</div>
+            <div class="podium-name">${escHTML(u.username)}${supporterBadge(u)}</div>
+            <div class="podium-xp">${scoreIcon} ${score}</div>
+            <div class="podium-base">${meta.pos}</div>
           </div>`;
         }).join('')}
-      </div>`:'' ;
+      </div>`:'';
+
+    // Lista dal 4° in poi
+    const rest=users.slice(3,50);
     const listHTML=rest.map((u,i)=>{
       const rank=i+4;
-      const scoreVal=lbFilter==='streak'?(u.streak||0):(u.xp||0);
-      const scoreLabel=lbFilter==='streak'?'gg':'XP';
-      const avatarContent=u.avatarUrl?`<img src="${u.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:(u.avatar||initials(u.username));
-      const streakBadge=(u.streak||0)>=7?` <span style="font-size:.85rem" title="${u.streak} giorni di streak">🔥</span>`:'';
-      return `<div class="lb-item${ME&&ME._id===u._id?' me':''}" onclick="viewUser('${u._id}')" style="cursor:pointer">
+      const score=u[scoreKey]||0;
+      const av=u.avatarUrl?`<img src="${u.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:(u.avatar||initials(u.username));
+      const isMe=ME&&ME._id===u._id;
+      const streakBadge=(u.streak||0)>=7?'<span style="font-size:.8rem" title="'+u.streak+' giorni">🔥</span>':'';
+      return `<div class="lb-item${isMe?' me':''}" onclick="viewUser('${u._id}')" style="cursor:pointer">
         <div class="lb-rank">${rank}</div>
-        <div class="avatar-circle" style="width:42px;height:42px;background:${pickColor(u.username)};font-size:1rem;overflow:hidden;flex-shrink:0">${avatarContent}</div>
+        <div class="avatar-circle" style="width:40px;height:40px;background:${pickColor(u.username)};font-size:.95rem;overflow:hidden;flex-shrink:0">${av}</div>
         <div class="lb-info">
-          <strong>${escHTML(u.username)}${ME&&ME._id===u._id?' <span style="color:var(--coral)">(Tu)</span>':''}${streakBadge}${supporterBadge(u)}</strong>
-          <span>${u.level||'A1'} · streak ${u.streak||0} · ${(u.badges||[]).slice(0,3).join(' ')}</span>
+          <strong>${escHTML(u.username)}${isMe?' <span style="color:var(--coral)">(Tu)</span>':''}${streakBadge}${supporterBadge(u)}</strong>
+          <span>${u.level||'A1'} · ${Object.keys(u.progress||{}).length} esercizi</span>
         </div>
-        <div class="lb-xp">${scoreVal}<small style="font-size:.68rem;color:var(--muted);display:block">${scoreLabel}</small></div>
+        <div class="lb-xp">${scoreIcon} ${score}<small style="font-size:.65rem;color:var(--muted);display:block">${scoreLabel}</small></div>
       </div>`;
     }).join('');
-    lb.innerHTML=podiumHTML+listHTML;
+
+    lb.innerHTML=myCardHTML+podiumHTML+listHTML;
   }catch(e){
-    lb.innerHTML=`<div class="empty-state"><div class="ei">⚠️</div><h3>${e.message}</h3></div>`;
+    lb.innerHTML='<div class="empty-state"><div class="ei">⚠️</div><h3>'+e.message+'</h3></div>';
   }
 }
 
